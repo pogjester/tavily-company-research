@@ -1,5 +1,17 @@
+# Environment and secrets
 .env
-.venv
-*.pyc[cod]
+
+# Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual Environment
+.venv/
+
+# IDE and OS
+.vscode/
 .DS_Store
+
+# LangGraph
+.langgraph/

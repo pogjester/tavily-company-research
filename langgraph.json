@@ -1,0 +1,15 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "research": "./langgraph_entry.py:graph"
+  },
+  "env": ".env",
+  "python_version": "3.11",
+  "dependencies": [
+    "langchain>=0.3.18",
+    "langgraph>=0.2.71",
+    "tavily-python>=0.5.1",
+    "langchain-core>=0.3.34",
+    "."
+  ]
+}
