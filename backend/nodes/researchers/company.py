@@ -41,9 +41,7 @@ class CompanyAnalyzer(BaseResearcher):
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for company information using {len(queries)} queries..."
-            for query in queries:
-                search_results = await self.search_documents(query)
-                company_data.update(search_results)
+            company_data = await self.search_documents(queries)
             
             msg += f"\n✅ Found {len(company_data)} relevant company documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

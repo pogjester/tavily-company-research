@@ -27,14 +27,14 @@ class Briefing:
         
         # Create category-specific prompts
         prompts = {
-            'financial': rf"""You are analyzing financial information about {company} in the {industry} industry.
+            'financial': rf"""You are analyzing financial information about {company}.
 Based on the provided documents, create a concise financial briefing that covers:
 - Key financial metrics and performance
 - Market valuation and growth
 - Funding and investment status
 - Notable financial developments""",
             
-            'news': rf"""You are analyzing recent news about {company} in the {industry} industry.
+            'news': rf"""You are analyzing recent news about {company}.
 Based on the provided documents, create a concise news briefing that covers:
 - Major recent developments
 - Key announcements
@@ -48,7 +48,7 @@ Based on the provided documents, create a concise industry briefing that covers:
 - Industry trends and challenges
 - Regulatory environment""",
             
-            'company': rf"""You are analyzing core information about {company} in the {industry} industry.
+            'company': rf"""You are analyzing core information about {company}.
 Based on the provided documents, create a concise company briefing that covers:
 - Core products and services
 - Business model and strategy
@@ -76,7 +76,7 @@ Documents to analyze:
 
 Create a clear, well-organized research briefing that extracts and synthesizes the key information.
 Focus on factual, verifiable information.
-Use bullet points where appropriate for clarity."""
+Use bullet points where appropriate for clarity. No explanation."""
         )
         
         response = await self.llm.ainvoke(prompt)

@@ -5,6 +5,7 @@ import os
 import json
 from typing import List, Dict, Any
 from datetime import datetime
+import asyncio
 
 from ...classes import ResearchState
 
@@ -60,7 +61,6 @@ class BaseResearcher:
         
         try:
             # Extract the JSON array from the response
-            # First, find anything that looks like a JSON array
             content = response.content
             start_idx = content.find('[')
             end_idx = content.rfind(']') + 1
@@ -68,14 +68,14 @@ class BaseResearcher:
                 json_str = content[start_idx:end_idx]
                 queries = json.loads(json_str)
                 if queries and isinstance(queries, list):
-                    return queries
+                    return queries[:4]  # Limit to 4 queries for speed
             
             # Fallback: if we can't parse JSON, look for line items
             queries = [
                 q.strip('- "\'') for q in response.content.split('\n')
                 if q.strip('- "\'')
             ]
-            return queries[:6]  # Limit to 6 queries
+            return queries[:4]  # Limit to 4 queries for speed
         except Exception as e:
             print(f"Error parsing LLM response: {e}")
             # Fallback to basic queries if everything fails
@@ -83,21 +83,40 @@ class BaseResearcher:
                 f"{company} overview {datetime.now().year}",
                 f"{company} recent news {datetime.now().year}",
                 f"{company} {prompt.split()[0]} {datetime.now().year}"
-            ] 
+            ]
 
-    async def search_documents(self, query: str, search_depth: str = "advanced") -> Dict[str, Any]:
-        """Perform a search and return results without raw content."""
-        search_results = await self.tavily_client.search(
-            query,
-            search_depth=search_depth
-        )
+    async def search_single_query(self, query: str, search_depth: str = "advanced") -> Dict[str, Any]:
+        """Perform a search for a single query."""
+        try:
+            search_results = await self.tavily_client.search(
+                query,
+                search_depth=search_depth,
+                include_raw_content=False,
+                max_results=5  # Limit results per query for speed
+            )
+            
+            results = {}
+            for result in search_results.get('results', []):
+                results[result['url']] = {
+                    'title': result.get('title'),
+                    'content': result.get('content'),
+                    'score': result.get('score'),
+                    'query': query
+                }
+            return results
+        except Exception as e:
+            print(f"Error searching query '{query}': {e}")
+            return {}
+
+    async def search_documents(self, queries: List[str], search_depth: str = "advanced") -> Dict[str, Any]:
+        """Perform searches in parallel for multiple queries."""
+        # Run all searches in parallel
+        search_tasks = [self.search_single_query(query, search_depth) for query in queries]
+        results_list = await asyncio.gather(*search_tasks)
         
-        results = {}
-        for result in search_results.get('results', []):
-            results[result['url']] = {
-                'title': result.get('title'),
-                'content': result.get('content'),  # This is the summary content
-                'score': result.get('score'),
-                'query': query
-            }
-        return results 
+        # Merge all results
+        merged_results = {}
+        for results in results_list:
+            merged_results.update(results)
+        
+        return merged_results 

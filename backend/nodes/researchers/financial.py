@@ -37,9 +37,7 @@ class FinancialAnalyst(BaseResearcher):
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for financial information using {len(queries)} queries..."
-            for query in queries:
-                search_results = await self.search_documents(query)
-                financial_data.update(search_results)
+            financial_data = await self.search_documents(queries)
             
             msg += f"\n✅ Found {len(financial_data)} relevant financial documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

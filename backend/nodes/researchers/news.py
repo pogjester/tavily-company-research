@@ -33,9 +33,7 @@ class NewsScanner(BaseResearcher):
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for news coverage using {len(queries)} queries..."
-            for query in queries:
-                search_results = await self.search_documents(query, search_depth="advanced")
-                news_data.update(search_results)
+            news_data = await self.search_documents(queries)
             
             msg += f"\n✅ Found {len(news_data)} relevant news articles"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

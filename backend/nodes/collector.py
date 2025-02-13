@@ -17,19 +17,12 @@ class Collector:
             'company_data': '🏢 Company'
         }
         
-        all_present = True
         for data_field, label in research_types.items():
             data = state.get(data_field, {})
             if data:
                 msg.append(f"• {label}: {len(data)} documents collected")
-                raw_content_count = sum(1 for doc in data.values() if doc.get('raw_content'))
-                msg.append(f"  ✓ {raw_content_count}/{len(data)} documents have raw content")
             else:
                 msg.append(f"• {label}: No data found")
-                all_present = False
-        
-        if not all_present:
-            msg.append("\n⚠️ Warning: Some research data is missing")
         
         # Update state with collection message
         messages = state.get('messages', [])
