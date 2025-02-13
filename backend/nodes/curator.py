@@ -89,8 +89,8 @@ class Curator:
             docs = list(data.values())
             evaluated_docs = await self.evaluate_documents(docs, query)
 
-            # Filter documents with a score above 0.6
-            curated_data = {url: doc for url, doc in zip(data.keys(), evaluated_docs) if doc['evaluation']['overall_score'] >= 0.6}
+            # Filter documents with a score above 0.5
+            curated_data = {url: doc for url, doc in zip(data.keys(), evaluated_docs) if doc['evaluation']['overall_score'] >= 0.5}
 
             # Update state with curated data
             state[f'curated_{data_field}'] = curated_data

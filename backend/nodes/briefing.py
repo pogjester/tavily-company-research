@@ -117,6 +117,10 @@ Use bullet points where appropriate for clarity."""
                 msg.append("=" * 40)
                 msg.append(briefing)
                 msg.append("=" * 40 + "\n")
+
+                print(f"Curated data for {label}: {bool(curated_data)}")
+                print(f"Generated briefing for {category}: {briefing if curated_data else 'No briefing generated'}")
+                print(f"State after briefing generation: {state}")
             else:
                 msg.append(f"\n• No curated {label} documents available")
         
@@ -143,7 +147,6 @@ Use bullet points where appropriate for clarity."""
             print("-" * 40)
             print(content)
             print("=" * 80)
-        
         return state
 
     async def run(self, state: ResearchState) -> ResearchState:
