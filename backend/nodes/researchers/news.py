@@ -22,32 +22,20 @@ class NewsScanner(BaseResearcher):
         
         news_data = {}
         
-        # If we have site_scrape data, analyze it first
+        # If we have site_scrape data, include it first
         if site_scrape := state.get('site_scrape'):
             msg += "\n📊 Including site scrape data in company analysis..."
             news_data[InputState['company_url']] = {
                 'title': InputState['company'],
                 'raw_content': site_scrape
             }
+        
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for news coverage using {len(queries)} queries..."
             for query in queries:
-                search_results = await self.tavily_client.search(
-                    query,
-                    search_depth="advanced",
-                    sort_by="date",  # Prioritize recent results
-                    include_raw_content=True
-                )
-                for result in search_results.get('results', []):
-                    news_data[result['url']] = {
-                        'title': result.get('title'),
-                        'content': result.get('content'),
-                        'raw_content': result.get('raw_content'),
-                        'score': result.get('score'),
-                        'query': query,
-                        'published_date': result.get('published_date')
-                    }
+                search_results = await self.search_documents(query, search_depth="advanced")
+                news_data.update(search_results)
             
             msg += f"\n✅ Found {len(news_data)} relevant news articles"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

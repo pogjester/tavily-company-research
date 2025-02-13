@@ -1,5 +1,5 @@
 from langchain_core.messages import AIMessage
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from typing import Dict, Any
 from datetime import datetime
 import os
@@ -7,17 +7,18 @@ import os
 from ..classes import ResearchState
 
 class Editor:
-    """Compiles individual briefings into a single cohesive document."""
+    """Compiles individual briefings into a concise cohesive document."""
     
     def __init__(self) -> None:
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
             
-        self.llm = ChatAnthropic(
-            model_name="claude-3-haiku-20240307",
+        self.llm = ChatOpenAI(
+            model_name="gpt-4o-mini",
             temperature=0,
-            max_tokens=1024
+            max_tokens=4096,
+            api_key=openai_key
         )
 
     async def edit_report(self, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
@@ -54,7 +55,7 @@ Please compile these into a single cohesive report that:
 - Ensure information is up to date and recent ({datetime.now().strftime("%Y-%m-%d")})
 - Includes a list of URL citations at the end
 
-Return the edited report with the same section structure but improved flow and clarity."""
+Return the edited report with the same section structure but improved flow and clarity. No explanation."""
 
         response = await self.llm.ainvoke(prompt)
         return response.content

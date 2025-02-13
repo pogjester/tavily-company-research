@@ -42,19 +42,8 @@ class CompanyAnalyzer(BaseResearcher):
         try:
             msg += f"\n🔍 Searching for company information using {len(queries)} queries..."
             for query in queries:
-                search_results = await self.tavily_client.search(
-                    query,
-                    search_depth="advanced",
-                    include_raw_content=True
-                )
-                for result in search_results.get('results', []):
-                    company_data[result['url']] = {
-                        'title': result.get('title'),
-                        'content': result.get('content'),
-                        'raw_content': result.get('raw_content'),
-                        'score': result.get('score'),
-                        'query': query
-                    }
+                search_results = await self.search_documents(query)
+                company_data.update(search_results)
             
             msg += f"\n✅ Found {len(company_data)} relevant company documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

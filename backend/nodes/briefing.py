@@ -1,5 +1,5 @@
 from langchain_core.messages import AIMessage
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from typing import Dict, Any
 import os
 
@@ -9,18 +9,19 @@ class Briefing:
     """Creates briefings for each research category using curated documents."""
     
     def __init__(self) -> None:
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
             
-        self.llm = ChatAnthropic(
-            model_name="claude-3-haiku-20240307",
+        self.llm = ChatOpenAI(
+            model_name="gpt-4o-mini",
             temperature=0,
-            max_tokens=1024
+            max_tokens=4096,
+            api_key=openai_key
         )
 
     async def generate_category_briefing(self, docs: Dict[str, Any], category: str, context: Dict[str, Any]) -> str:
-        """Generate a briefing for a specific category of research."""
+        """Generate a concise briefing for a specific category of research. No explanation."""
         company = context['company']
         industry = context.get('industry', 'Unknown')
         
@@ -66,14 +67,14 @@ Based on the provided documents, create a concise company briefing that covers:
         # Build the final prompt
         separator = r"\n" + "-" * 40 + r"\n"
         prompt = (
-            rf"""{prompts.get(category, 'Create a concise briefing based on the provided documents.')}
+            rf"""{prompts.get(category, 'Create a research briefing based on the provided documents.')}
 
 Documents to analyze:
 {separator}
 {separator.join(doc_texts)}
 {separator}
 
-Create a clear, well-organized briefing that extracts and synthesizes the key information.
+Create a clear, well-organized research briefing that extracts and synthesizes the key information.
 Focus on factual, verifiable information.
 Use bullet points where appropriate for clarity."""
         )

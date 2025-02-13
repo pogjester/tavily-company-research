@@ -33,22 +33,13 @@ class FinancialAnalyst(BaseResearcher):
                 'title': InputState['company'],
                 'raw_content': site_scrape
             }
+        
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for financial information using {len(queries)} queries..."
             for query in queries:
-                search_results = await self.tavily_client.search( query,
-                    search_depth="advanced",
-                    include_raw_content=True)
-                for result in search_results.get('results', []):
-                    financial_data[result['url']] = {
-                        'title': result.get('title'),
-                        'content': result.get('content'),
-                        'raw_content': result.get('raw_content'),
-                        'score': result.get('score'),
-                        'query': query
-                    }
-            
+                search_results = await self.search_documents(query)
+                financial_data.update(search_results)
             
             msg += f"\n✅ Found {len(financial_data)} relevant financial documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
@@ -67,7 +58,6 @@ class FinancialAnalyst(BaseResearcher):
             'message': msg,
             'financial_data': financial_data
         }
-
 
     async def run(self, state: ResearchState) -> Dict[str, Any]:
         return await self.analyze(state) 

@@ -81,9 +81,6 @@ class Graph:
         # Editor feeds into output
         self.workflow.add_edge("editor", "output")
 
-        # Add memory saver to the workflow
-        self.memory = MemorySaver()
-
     async def run(self, config: Dict[str, Any], thread: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """Run the graph with the given configuration.
         

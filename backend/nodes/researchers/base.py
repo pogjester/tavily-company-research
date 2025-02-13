@@ -3,7 +3,7 @@ from langchain_anthropic import ChatAnthropic
 from tavily import AsyncTavilyClient
 import os
 import json
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime
 
 from ...classes import ResearchState
@@ -84,3 +84,20 @@ class BaseResearcher:
                 f"{company} recent news {datetime.now().year}",
                 f"{company} {prompt.split()[0]} {datetime.now().year}"
             ] 
+
+    async def search_documents(self, query: str, search_depth: str = "advanced") -> Dict[str, Any]:
+        """Perform a search and return results without raw content."""
+        search_results = await self.tavily_client.search(
+            query,
+            search_depth=search_depth
+        )
+        
+        results = {}
+        for result in search_results.get('results', []):
+            results[result['url']] = {
+                'title': result.get('title'),
+                'content': result.get('content'),  # This is the summary content
+                'score': result.get('score'),
+                'query': query
+            }
+        return results 

@@ -1,28 +1,31 @@
 from langchain_core.messages import AIMessage
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 import os
 import cohere
+from tavily import AsyncTavilyClient
 
 from ..classes import ResearchState
 
 class Curator:
     def __init__(self) -> None:
         cohere_key = os.getenv("COHERE_API_KEY")
+        tavily_key = os.getenv("TAVILY_API_KEY")
         if not cohere_key:
             raise ValueError("COHERE_API_KEY environment variable is not set")
+        if not tavily_key:
+            raise ValueError("TAVILY_API_KEY environment variable is not set")
         self.co = cohere.Client(cohere_key)
+        self.tavily_client = AsyncTavilyClient(api_key=tavily_key)
 
     async def evaluate_documents(self, docs: list, query: str) -> list:
         """Evaluate a list of documents' relevance using Cohere rerank."""
-        # Prepare document content, combining title, content, and raw content
+        # Prepare document content, using available content
         documents = []
         for doc in docs:
             title = doc.get('title', '')
-            content = doc.get('content', '')
-            raw_content = doc.get('raw_content', '')
-            # Combine all available content, prioritizing raw content if available
-            full_content = f"{title}\n{raw_content if raw_content else content}"
+            content = doc.get('content', '')  # Using summary content for initial ranking
+            full_content = f"{title}\n{content}"
             documents.append(full_content)
 
         # Rerank the documents
@@ -41,13 +44,24 @@ class Curator:
             evaluated_doc = {
                 **doc,
                 "evaluation": {
-                    "overall_score": score,
-                    "used_raw_content": bool(doc.get('raw_content'))
+                    "overall_score": score
                 }
             }
             evaluated_docs.append(evaluated_doc)
 
         return evaluated_docs
+
+    async def fetch_raw_content(self, urls: List[str]) -> Dict[str, str]:
+        """Fetch raw content for a list of URLs using Tavily."""
+        raw_contents = {}
+        for url in urls:
+            try:
+                result = await self.tavily_client.extract(url)
+                if result and result.get('results'):
+                    raw_contents[url] = result['results'][0].get('raw_content', '')
+            except Exception as e:
+                print(f"Error fetching raw content for {url}: {e}")
+        return raw_contents
 
     async def curate_data(self, state: ResearchState) -> ResearchState:
         """Curate all collected data."""
@@ -90,11 +104,22 @@ class Curator:
             evaluated_docs = await self.evaluate_documents(docs, query)
 
             # Filter documents with a score above 0.5
-            curated_data = {url: doc for url, doc in zip(data.keys(), evaluated_docs) if doc['evaluation']['overall_score'] >= 0.5}
+            relevant_docs = {url: doc for url, doc in zip(data.keys(), evaluated_docs) 
+                           if doc['evaluation']['overall_score'] >= 0.5}
+
+            # Fetch raw content only for relevant documents
+            if relevant_docs:
+                msg.append(f"  • Fetching full content for {len(relevant_docs)} relevant documents...")
+                raw_contents = await self.fetch_raw_content(list(relevant_docs.keys()))
+                
+                # Update relevant documents with raw content
+                for url, raw_content in raw_contents.items():
+                    if raw_content:
+                        relevant_docs[url]['raw_content'] = raw_content
 
             # Update state with curated data
-            state[f'curated_{data_field}'] = curated_data
-            msg.append(f"  ✓ Kept {len(curated_data)}/{len(data)} relevant documents")
+            state[f'curated_{data_field}'] = relevant_docs
+            msg.append(f"  ✓ Kept {len(relevant_docs)}/{len(data)} relevant documents")
 
         # Update state with curation message
         messages = state.get('messages', [])
