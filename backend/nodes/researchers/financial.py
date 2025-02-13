@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
-from tavily import AsyncTavilyClient
-import os
+from typing import Dict, Any
+
 
 from ...classes import ResearchState
 from .base import BaseResearcher
@@ -9,7 +9,7 @@ class FinancialAnalyst(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
 
-    async def analyze(self, state: ResearchState) -> ResearchState:
+    async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
         msg = f"💰 Financial Analyst researching {company}...\n"
         
@@ -50,11 +50,15 @@ class FinancialAnalyst(BaseResearcher):
         
         # Update state with our findings
         messages = state.get('messages', [])
-        messages.append(AIMessage(content="\n".join(msg)))
+        messages.append(AIMessage(content=msg))
         state['messages'] = messages
         state['financial_data'] = financial_data
         
-        return state
+        return {
+            'message': msg,
+            'financial_data': financial_data
+        }
 
-    async def run(self, state: ResearchState) -> ResearchState:
+
+    async def run(self, state: ResearchState) -> Dict[str, Any]:
         return await self.analyze(state) 

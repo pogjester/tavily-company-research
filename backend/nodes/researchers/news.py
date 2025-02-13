@@ -1,5 +1,5 @@
 from langchain_core.messages import AIMessage
-
+from typing import Dict, Any
 from ...classes import ResearchState
 from .base import BaseResearcher
 
@@ -7,7 +7,7 @@ class NewsScanner(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
 
-    async def analyze(self, state: ResearchState) -> ResearchState:
+    async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
         msg = f"📰 News Scanner analyzing recent coverage of {company}...\n"
         
@@ -59,7 +59,10 @@ class NewsScanner(BaseResearcher):
         state['messages'] = messages
         state['news_data'] = news_data
         
-        return state
+        return {
+            'message': msg,
+            'news_data': news_data
+        }
 
-    async def run(self, state: ResearchState) -> ResearchState:
+    async def run(self, state: ResearchState) -> Dict[str, Any]:
         return await self.analyze(state) 

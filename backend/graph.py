@@ -14,20 +14,20 @@ from .nodes.researchers import (
     IndustryAnalyzer,
     CompanyAnalyzer
 )
+from .nodes.collector import Collector
+from .nodes.curator import Curator
 
 class Graph:
     def __init__(self, company=None, url=None, hq_location=None, industry=None):
-        # Initial setup of ResearchState and messages
-        self.messages = [
-            SystemMessage(content="You are an expert researcher ready to begin the information gathering process.")
-        ]
-
-        #Initialize InputState
-        self.input_state = InputState(
+        # Initialize InputState
+        self.input_state = ResearchState(
             company=company,
             company_url=url,
             hq_location=hq_location,
-            industry=industry
+            industry=industry,
+            messages=[
+                SystemMessage(content="You are an expert researcher ready to begin the information gathering process.")
+            ]
         )
 
         # Initialize all nodes
@@ -36,6 +36,8 @@ class Graph:
         self.news_scanner = NewsScanner()
         self.industry_analyst = IndustryAnalyzer()
         self.company_analyst = CompanyAnalyzer()
+        self.collector = Collector()
+        self.curator = Curator()
 
         # Initialize workflow for the graph
         self.workflow = StateGraph(InputState)
@@ -46,14 +48,22 @@ class Graph:
         self.workflow.add_node("news_scanner", self.news_scanner.run)
         self.workflow.add_node("industry_analyst", self.industry_analyst.run)
         self.workflow.add_node("company_analyst", self.company_analyst.run)
+        self.workflow.add_node("collector", self.collector.run)
+        self.workflow.add_node("curator", self.curator.run)
 
         # Set up the workflow
-        # After grounding, run all research tasks in parallel
         self.workflow.set_entry_point("grounding")
-        self.workflow.add_edge("grounding", "financial_analyst")
-        self.workflow.add_edge("grounding", "news_scanner")
-        self.workflow.add_edge("grounding", "industry_analyst")
-        self.workflow.add_edge("grounding", "company_analyst")
+     
+        # Define the list of research nodes
+        research_nodes = ["financial_analyst", "news_scanner", "industry_analyst", "company_analyst"]
+
+        # After grounding, run all research tasks in parallel
+        for node in research_nodes:
+            self.workflow.add_edge("grounding", node)
+            self.workflow.add_edge(node, "collector")
+
+        # Collector feeds into curator
+        self.workflow.add_edge("collector", "curator")
 
         # Add memory saver to the workflow
         self.memory = MemorySaver()
@@ -68,7 +78,7 @@ class Graph:
         Yields:
             Dict containing the current state of the graph
         """
-        # Update input state with config if provided
+        # Update state with config if provided
         if config:
             self.input_state.update(config)
             

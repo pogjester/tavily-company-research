@@ -1,4 +1,5 @@
 from langchain_core.messages import AIMessage
+from typing import Dict, Any
 
 from ...classes import ResearchState
 from .base import BaseResearcher
@@ -7,7 +8,7 @@ class CompanyAnalyzer(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
 
-    async def analyze(self, state: ResearchState) -> ResearchState:
+    async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
         msg = f"🏢 Company Analyzer researching {company}'s core business...\n"
         
@@ -63,7 +64,10 @@ class CompanyAnalyzer(BaseResearcher):
         state['messages'] = messages
         state['company_data'] = company_data
         
-        return state
+        return {
+            'message': msg,
+            'company_data': company_data
+        }
 
-    async def run(self, state: ResearchState) -> ResearchState:
+    async def run(self, state: ResearchState) -> Dict[str, Any]:
         return await self.analyze(state) 
