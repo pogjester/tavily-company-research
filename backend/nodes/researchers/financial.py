@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage
 from typing import Dict, Any
 
 
-from ...classes import ResearchState
+from ...classes import ResearchState, InputState
 from .base import BaseResearcher
 
 class FinancialAnalyst(BaseResearcher):
@@ -26,20 +26,29 @@ class FinancialAnalyst(BaseResearcher):
         
         financial_data = {}
         
-        # If we have site_scrape data, analyze it first
-        if state.get('site_scrape'):
-            msg += "\n📊 Analyzing extracted financial information..."
-            # TODO: Analyze the scraped content for financial information
-        
+        # If we have site_scrape data, include it first
+        if site_scrape := state.get('site_scrape'):
+            msg += "\n📊 Including site scrape data in company analysis..."
+            financial_data[InputState['company_url']] = {
+                'title': InputState['company'],
+                'raw_content': site_scrape
+            }
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for financial information using {len(queries)} queries..."
             for query in queries:
-                search_results = await self.tavily_client.search(query)
-                for result in search_results.get("results", []):
-                    url = result.get("url")
-                    if url not in financial_data:
-                        financial_data[url] = result
+                search_results = await self.tavily_client.search( query,
+                    search_depth="advanced",
+                    include_raw_content=True)
+                for result in search_results.get('results', []):
+                    financial_data[result['url']] = {
+                        'title': result.get('title'),
+                        'content': result.get('content'),
+                        'raw_content': result.get('raw_content'),
+                        'score': result.get('score'),
+                        'query': query
+                    }
+            
             
             msg += f"\n✅ Found {len(financial_data)} relevant financial documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

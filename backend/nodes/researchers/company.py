@@ -1,7 +1,7 @@
 from langchain_core.messages import AIMessage
 from typing import Dict, Any
 
-from ...classes import ResearchState
+from ...classes import ResearchState, InputState
 from .base import BaseResearcher
 
 class CompanyAnalyzer(BaseResearcher):
@@ -31,9 +31,12 @@ class CompanyAnalyzer(BaseResearcher):
         company_data = {}
         
         # If we have site_scrape data, analyze it first
-        if state.get('site_scrape'):
-            msg += "\n📊 Analyzing extracted company information..."
-            # TODO: Analyze the scraped content for company information
+        if site_scrape := state.get('site_scrape'):
+            msg += "\n📊 Including site scrape data in company analysis..."
+            company_data[InputState['company_url']] = {
+                'title': InputState['company'],
+                'raw_content': site_scrape
+            }
         
         # Perform additional research
         try:
@@ -48,6 +51,7 @@ class CompanyAnalyzer(BaseResearcher):
                     company_data[result['url']] = {
                         'title': result.get('title'),
                         'content': result.get('content'),
+                        'raw_content': result.get('raw_content'),
                         'score': result.get('score'),
                         'query': query
                     }

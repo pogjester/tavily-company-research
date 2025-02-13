@@ -39,13 +39,6 @@ class Editor:
         
         prompt = rf"""You are compiling a comprehensive research report about {company}.
 I will provide you with four sections of research that have already been prepared.
-Your task is to:
-1. Review all sections and identify any redundant information
-2. Ensure smooth transitions between sections
-3. Maintain consistent formatting and style
-4. Preserve the distinct focus of each section while removing repetition
-5. Keep all factual information but improve clarity and flow
-6. Ensure information is up to date and recent ({datetime.now().strftime("%Y-%m-%d")})
 
 Here are the sections:
 
@@ -53,11 +46,12 @@ Here are the sections:
 
 Please compile these into a single cohesive report that:
 - Maintains the four distinct sections with their original headers
-- Removes any redundant information between sections
+- Removes repetitive / redundant information between sections
 - Ensures consistent style and formatting throughout
 - Improves clarity and readability
 - Uses bullet points for key information
 - Preserves all important facts and insights
+- Ensure information is up to date and recent ({datetime.now().strftime("%Y-%m-%d")})
 - Includes a list of URL citations at the end
 
 Return the edited report with the same section structure but improved flow and clarity."""
