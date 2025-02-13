@@ -37,7 +37,8 @@ class IndustryAnalyzer(BaseResearcher):
             for query in queries:
                 search_results = await self.tavily_client.search(
                     query,
-                    search_depth="advanced"
+                    search_depth="advanced",
+                    include_raw_content=True
                 )
                 for result in search_results.get('results', []):
                     industry_data[result['url']] = {

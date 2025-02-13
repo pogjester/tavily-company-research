@@ -35,7 +35,8 @@ class NewsScanner(BaseResearcher):
                 search_results = await self.tavily_client.search(
                     query,
                     search_depth="advanced",
-                    sort_by="date"  # Prioritize recent results
+                    sort_by="date",  # Prioritize recent results
+                    include_raw_content=True
                 )
                 for result in search_results.get('results', []):
                     news_data[result['url']] = {
