@@ -16,6 +16,7 @@ from .nodes.researchers import (
 )
 from .nodes.collector import Collector
 from .nodes.curator import Curator
+from .nodes.briefing import Briefing
 
 class Graph:
     def __init__(self, company=None, url=None, hq_location=None, industry=None):
@@ -38,6 +39,7 @@ class Graph:
         self.company_analyst = CompanyAnalyzer()
         self.collector = Collector()
         self.curator = Curator()
+        self.briefing = Briefing()
 
         # Initialize workflow for the graph
         self.workflow = StateGraph(InputState)
@@ -50,6 +52,7 @@ class Graph:
         self.workflow.add_node("company_analyst", self.company_analyst.run)
         self.workflow.add_node("collector", self.collector.run)
         self.workflow.add_node("curator", self.curator.run)
+        self.workflow.add_node("briefing", self.briefing.run)
 
         # Set up the workflow
         self.workflow.set_entry_point("grounding")
@@ -64,6 +67,9 @@ class Graph:
 
         # Collector feeds into curator
         self.workflow.add_edge("collector", "curator")
+        
+        # Curator feeds into briefing
+        self.workflow.add_edge("curator", "briefing")
 
         # Add memory saver to the workflow
         self.memory = MemorySaver()
