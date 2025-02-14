@@ -37,9 +37,7 @@ class IndustryAnalyzer(BaseResearcher):
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for industry information using {len(queries)} queries..."
-            for query in queries:
-                search_results = await self.search_documents(query)
-                industry_data.update(search_results)
+            industry_data = await self.search_documents(queries)
             
             msg += f"\n✅ Found {len(industry_data)} relevant industry documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

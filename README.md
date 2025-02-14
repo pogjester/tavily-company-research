@@ -86,7 +86,7 @@ async for state in graph.run({}, {}):
     print(state.get('messages', [])[-1].content)
 ```
 
-### Running in LangGraph Studio 🎮
+### Running in LangGraph Studio 🦜🕸️
 
 The project includes LangGraph Studio configuration for easy visualization and debugging of the research pipeline.
 
@@ -190,6 +190,162 @@ The platform includes several optimizations:
 - Batched API requests
 - Efficient content curation before full extraction
 - Memory-optimized data processing
+
+## AWS Elastic Beanstalk Deployment 🌱
+
+### Prerequisites
+
+- AWS Account with appropriate permissions
+- AWS CLI installed and configured
+- Elastic Beanstalk CLI (`eb cli`) installed:
+
+```bash
+pip install awsebcli
+```
+
+### Configuration Files
+
+1. Create `.ebextensions/01_packages.config` for system dependencies:
+
+```yaml
+packages:
+  yum:
+    python3-devel: []
+    gcc: []
+    pandoc: []
+```
+
+2. Create `.ebextensions/02_python.config` for Python configuration:
+
+```yaml
+option_settings:
+  aws:elasticbeanstalk:container:python:
+    WSGIPath: application:app
+  aws:elasticbeanstalk:application:environment:
+    PYTHONPATH: "/var/app/current:$PYTHONPATH"
+  aws:autoscaling:launchconfiguration:
+    InstanceType: "t3.medium"
+  aws:elasticbeanstalk:environment:
+    ServiceRole: aws-elasticbeanstalk-service-role
+
+container_commands:
+  01_install_requirements:
+    command: "pip install -r requirements.txt"
+  02_create_logs_dir:
+    command: "mkdir -p /var/log/app-logs"
+    ignoreErrors: true
+```
+
+3. Create `Procfile` in the root directory:
+
+```
+web: gunicorn --workers=4 --threads=2 --timeout=120 application:app
+```
+
+### Environment Variables
+
+Create `.env.prod` for production environment variables:
+
+```env
+TAVILY_API_KEY=your_tavily_key
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+COHERE_API_KEY=your_cohere_key
+PYTHONPATH=/var/app/current
+```
+
+### Deployment Steps
+
+1. Initialize Elastic Beanstalk application:
+
+```bash
+eb init -p python-3.11 tavily-research
+```
+
+2. Create the environment:
+
+```bash
+eb create tavily-research-prod \
+  --instance_type t3.medium \
+  --min-instances 2 \
+  --max-instances 4 \
+  --scaling-metric-name CPUUtilization \
+  --scaling-metric-unit Percent \
+  --scaling-metric-lower-threshold 20 \
+  --scaling-metric-upper-threshold 70
+```
+
+3. Set environment variables:
+
+```bash
+eb setenv $(cat .env.prod)
+```
+
+4. Deploy your application:
+
+```bash
+eb deploy
+```
+
+### Auto Scaling Configuration
+
+The environment is configured for auto-scaling with:
+
+- Minimum instances: 2
+- Maximum instances: 4
+- Scale up when CPU > 70%
+- Scale down when CPU < 20%
+
+### Monitoring and Logs
+
+1. View application logs:
+
+```bash
+eb logs
+```
+
+2. Monitor environment health:
+
+```bash
+eb health
+```
+
+3. Access CloudWatch metrics:
+
+```bash
+eb console
+```
+
+### Troubleshooting
+
+Common issues and solutions:
+
+1. **Memory Issues**:
+
+   - Increase container memory in `.ebextensions/02_python.config`
+   - Monitor memory usage through CloudWatch
+
+2. **Long-Running Tasks**:
+
+   - Adjust gunicorn timeout in `Procfile`
+   - Consider using worker processes for research tasks
+
+3. **API Rate Limits**:
+
+   - Implement retry logic in API calls
+   - Monitor API usage through CloudWatch custom metrics
+
+4. **Scaling Issues**:
+   - Check CPU utilization metrics
+   - Adjust auto-scaling thresholds as needed
+
+### Best Practices
+
+- Use environment variables for all sensitive information
+- Implement proper logging for debugging
+- Monitor API usage and costs
+- Regular backup of environment configuration
+- Set up alarms for critical metrics
 
 ## License 📝
 

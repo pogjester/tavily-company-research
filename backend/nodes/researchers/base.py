@@ -37,56 +37,79 @@ class BaseResearcher:
         if hq:
             context += f"\nHeadquarters: {hq}"
             
+        print(f"\n🔍 Generating queries for {company}...")
+            
         response = await self.llm.ainvoke(
             f"""You are conducting research on {context} on {current_date}.
-            
-            Generate 4-6 specific search queries to gather information about the company.
+            Generate 4 specific search queries to gather information about the company.
             Focus your queries on recent and current information.
             
             {prompt}
             
             Return ONLY a JSON array of strings, where each string is a search query.
-            Make queries specific and targeted to get high-quality results.
-            Include the company name in most queries.
-            Include the current year {datetime.now().year} in queries where relevant.
+            Include the company name and year in each query.
+            Each query must be at least 3 words long.
             
             Example format:
             [
-                "Company X revenue growth",
-                "Company X market share in Industry Y",
-                "Company X recent announcements"
+                "Apple revenue growth 2025",
+                "Apple market share in smartphone industry 2025",
+                "Apple recent product announcements 2025",
+                "Apple financial performance Q1 2025"
             ]
             """
         )
         
+        # Default queries in case parsing fails
+        default_queries = [
+            f"{company} overview {datetime.now().year}",
+            f"{company} recent news {datetime.now().year}",
+            f"{company} {prompt.split()[0]} {datetime.now().year}",
+            f"{company} industry analysis {datetime.now().year}"
+        ]
+        
         try:
             # Extract the JSON array from the response
-            content = response.content
-            start_idx = content.find('[')
-            end_idx = content.rfind(']') + 1
-            if start_idx >= 0 and end_idx > start_idx:
+            content = response.content.strip()
+            print(f"\n📝 LLM Response:\n{content}")
+            
+            if '[' in content and ']' in content:
+                start_idx = content.find('[')
+                end_idx = content.rfind(']') + 1
                 json_str = content[start_idx:end_idx]
                 queries = json.loads(json_str)
-                if queries and isinstance(queries, list):
-                    return queries[:4]  # Limit to 4 queries for speed
+                
+                if isinstance(queries, list) and len(queries) > 0:
+                    # Validate each query
+                    valid_queries = []
+                    for query in queries:
+                        if isinstance(query, str) and len(query.split()) >= 3:
+                            valid_queries.append(query)
+                    
+                    if valid_queries:
+                        print(f"\n✅ Generated {len(valid_queries)} valid queries:")
+                        for q in valid_queries[:4]:
+                            print(f"  • {q}")
+                        return valid_queries[:4]  # Limit to 4 queries
             
-            # Fallback: if we can't parse JSON, look for line items
-            queries = [
-                q.strip('- "\'') for q in response.content.split('\n')
-                if q.strip('- "\'')
-            ]
-            return queries[:4]  # Limit to 4 queries for speed
+            print("\n⚠️ Failed to parse valid queries from LLM response, using defaults:")
+            for q in default_queries:
+                print(f"  • {q}")
+            return default_queries
+            
         except Exception as e:
-            print(f"Error parsing LLM response: {e}")
-            # Fallback to basic queries if everything fails
-            return [
-                f"{company} overview {datetime.now().year}",
-                f"{company} recent news {datetime.now().year}",
-                f"{company} {prompt.split()[0]} {datetime.now().year}"
-            ]
+            print(f"\n❌ Error parsing LLM response: {e}")
+            print("Using default queries:")
+            for q in default_queries:
+                print(f"  • {q}")
+            return default_queries
 
     async def search_single_query(self, query: str, search_depth: str = "advanced") -> Dict[str, Any]:
         """Perform a search for a single query."""
+        if not isinstance(query, str) or len(query.split()) < 3:
+            print(f"Invalid query format: {query}")
+            return {}
+            
         try:
             search_results = await self.tavily_client.search(
                 query,
@@ -110,8 +133,18 @@ class BaseResearcher:
 
     async def search_documents(self, queries: List[str], search_depth: str = "advanced") -> Dict[str, Any]:
         """Perform searches in parallel for multiple queries."""
+        if not isinstance(queries, list):
+            print(f"Invalid queries format: {queries}")
+            return {}
+            
+        # Filter out invalid queries
+        valid_queries = [q for q in queries if isinstance(q, str) and len(q.split()) >= 3]
+        if not valid_queries:
+            print("No valid queries to search")
+            return {}
+            
         # Run all searches in parallel
-        search_tasks = [self.search_single_query(query, search_depth) for query in queries]
+        search_tasks = [self.search_single_query(query, search_depth) for query in valid_queries]
         results_list = await asyncio.gather(*search_tasks)
         
         # Merge all results
