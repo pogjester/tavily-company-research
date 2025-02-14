@@ -10,7 +10,7 @@ class CompanyAnalyzer(BaseResearcher):
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
-        msg = f"🏢 Company Analyzer researching {company}'s core business...\n"
+        msg = [f"🏢 Company Analyzer analyzing {company}"]
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
@@ -33,19 +33,15 @@ class CompanyAnalyzer(BaseResearcher):
         # If we have site_scrape data and company_url, analyze it first
         if site_scrape := state.get('site_scrape'):
             if company_url := state.get('company_url'):
-                msg += "\n📊 Including site scrape data in company analysis..."
                 company_data[company_url] = {
                     'title': company,
                     'raw_content': site_scrape,
                     'source': 'company_website',
-                    'query': 'Company website content'  # Add query for site scrape
+                    'query': 'Company website content'
                 }
-            else:
-                msg += "\n⚠️ Site scrape data available but no company URL provided"
         
         # Perform additional research with comprehensive search
         try:
-            msg += f"\n🔍 Searching for company information using {len(queries)} queries..."
             # Store documents with their respective queries
             for query in queries:
                 documents = await self.search_documents([query], search_depth="advanced")
@@ -54,16 +50,13 @@ class CompanyAnalyzer(BaseResearcher):
                         doc['query'] = query  # Associate each document with its query
                         company_data[url] = doc
             
-            msg += f"\n✅ Found {len(company_data)} relevant company documents"
-            msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
+            msg.append(f"\n✓ Found {len(company_data)} documents")
         except Exception as e:
-            error_msg = f"⚠️ Error during company research: {str(e)}"
-            print(error_msg)
-            msg += f"\n{error_msg}"
+            msg.append(f"\n⚠️ Error during research: {str(e)}")
         
         # Update state with our findings
         messages = state.get('messages', [])
-        messages.append(AIMessage(content=msg))
+        messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
         state['company_data'] = company_data
         

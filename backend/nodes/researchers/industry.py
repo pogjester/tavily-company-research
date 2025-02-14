@@ -11,7 +11,7 @@ class IndustryAnalyzer(BaseResearcher):
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
         industry = state.get('industry', 'Unknown Industry')
-        msg = f"🏭 Industry Analyzer researching {company}'s position in {industry}...\n"
+        msg = [f"🏭 Industry Analyzer analyzing {company} in {industry}"]
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
@@ -29,19 +29,15 @@ class IndustryAnalyzer(BaseResearcher):
         # If we have site_scrape data and company_url, analyze it first
         if site_scrape := state.get('site_scrape'):
             if company_url := state.get('company_url'):
-                msg += "\n📊 Including site scrape data in industry analysis..."
                 industry_data[company_url] = {
                     'title': company,
                     'raw_content': site_scrape,
                     'source': 'company_website',
-                    'query': 'Company website content'  # Add query for site scrape
+                    'query': 'Company website content'
                 }
-            else:
-                msg += "\n⚠️ Site scrape data available but no company URL provided"
         
         # Perform additional research with increased search depth
         try:
-            msg += f"\n🔍 Searching for industry information using {len(queries)} queries..."
             # Store documents with their respective queries
             for query in queries:
                 documents = await self.search_documents([query], search_depth="advanced")
@@ -50,16 +46,13 @@ class IndustryAnalyzer(BaseResearcher):
                         doc['query'] = query  # Associate each document with its query
                         industry_data[url] = doc
             
-            msg += f"\n✅ Found {len(industry_data)} relevant industry documents"
-            msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
+            msg.append(f"\n✓ Found {len(industry_data)} documents")
         except Exception as e:
-            error_msg = f"⚠️ Error during industry research: {str(e)}"
-            print(error_msg)
-            msg += f"\n{error_msg}"
+            msg.append(f"\n⚠️ Error during research: {str(e)}")
         
         # Update state with our findings
         messages = state.get('messages', [])
-        messages.append(AIMessage(content=msg))
+        messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
         state['industry_data'] = industry_data
         

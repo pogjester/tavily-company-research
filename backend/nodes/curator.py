@@ -122,14 +122,14 @@ class Curator:
             "hq_location": state.get('hq_location', 'Unknown')
         }
 
-        msg = [f"🔍 Curating research data for {company}:"]
+        msg = [f"🔍 Curating research data for {company}"]
 
         # Process each type of data
         data_types = {
-            'financial_data': 'financial',
-            'news_data': 'news',
-            'industry_data': 'industry',
-            'company_data': 'company'
+            'financial_data': '💰 Financial',
+            'news_data': '📰 News',
+            'industry_data': '🏭 Industry',
+            'company_data': '🏢 Company'
         }
 
         # Create all evaluation tasks upfront
@@ -137,44 +137,33 @@ class Curator:
         for data_field, source_type in data_types.items():
             data = state.get(data_field, {})
             if not data:
-                msg.append(f"\n• No {source_type} data available to curate")
                 continue
 
             docs = list(data.values())
-            print(f"\nProcessing {source_type} data:")
-            print(f"Found {len(docs)} documents")
-
-            msg.append(f"\n• Found {len(docs)} {source_type} documents to evaluate")
             curation_tasks.append((data_field, source_type, data.keys(), docs))
 
         # Process all document types in parallel
         for data_field, source_type, urls, docs in curation_tasks:
-            msg.append(f"\n• Evaluating {len(docs)} {source_type} documents...")
+            msg.append(f"\n{data_types[data_field]}: Found {len(docs)} documents")
 
             # Evaluate documents based on content
             evaluated_docs = await self.evaluate_documents(docs, context)
 
             if not evaluated_docs:
-                msg.append(f"  ⚠️ No {source_type} documents could be evaluated")
+                msg.append(f"  ⚠️ No relevant documents found")
                 continue
 
             # Filter documents with a score above threshold
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.5}
-
-            print(f"\nRelevant {source_type} documents:")
-            print(f"Total evaluated: {len(evaluated_docs)}")
-            print(f"Kept after filtering: {len(relevant_docs)}")
+                           if doc['evaluation']['overall_score'] >= 0.6}
 
             if relevant_docs:
-                print("Sample scores:")
-                for url, doc in list(relevant_docs.items())[:2]:
-                    print(f"- {doc.get('title', 'No title')}: {doc['evaluation']['overall_score']:.3f}")
-                    print(f"  Query: {doc['evaluation']['query']}")
+                msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
+            else:
+                msg.append(f"  ⚠️ No documents met relevance threshold")
 
             # Update state with curated data
             state[f'curated_{data_field}'] = relevant_docs
-            msg.append(f"  ✓ Kept {len(relevant_docs)}/{len(docs)} relevant documents")
 
         # Update messages
         messages = state.get('messages', [])
