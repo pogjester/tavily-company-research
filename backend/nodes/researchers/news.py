@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
 from typing import Dict, Any
-from ...classes import ResearchState, InputState
+from ...classes import ResearchState
 from .base import BaseResearcher
 
 class NewsScanner(BaseResearcher):
@@ -13,29 +13,36 @@ class NewsScanner(BaseResearcher):
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
-        Focus on news aspects such as:
-        - Major recent developments
-        - Key announcements
-        - Notable partnerships or deals
-        - Public perception and media coverage
+        Focus on recent news coverage such as:
+        - Recent company announcements
+        - Press releases
+        - Media coverage
+        - Company developments
+        - Executive changes
+        - Strategic initiatives
         """)
         
         news_data = {}
         
-        # If we have site_scrape data, include it first
+        # If we have site_scrape data and company_url, analyze it first
         if site_scrape := state.get('site_scrape'):
-            msg += "\n📊 Including site scrape data in company analysis..."
-            news_data[InputState['company_url']] = {
-                'title': InputState['company'],
-                'raw_content': site_scrape
-            }
+            if company_url := state.get('company_url'):
+                msg += "\n📊 Including site scrape data in news analysis..."
+                news_data[company_url] = {
+                    'title': company,
+                    'raw_content': site_scrape,
+                    'source': 'company_website'
+                }
+            else:
+                msg += "\n⚠️ Site scrape data available but no company URL provided"
         
-        # Perform additional research
+        # Perform additional research with recent time filter
         try:
             msg += f"\n🔍 Searching for news coverage using {len(queries)} queries..."
-            news_data = await self.search_documents(queries)
+            search_results = await self.search_documents(queries, search_depth="advanced")
+            news_data.update(search_results)
             
-            msg += f"\n✅ Found {len(news_data)} relevant news articles"
+            msg += f"\n✅ Found {len(news_data)} relevant news documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
         except Exception as e:
             error_msg = f"⚠️ Error during news research: {str(e)}"

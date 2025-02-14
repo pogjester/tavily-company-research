@@ -1,4 +1,3 @@
-from langchain_core.messages import AIMessage
 from langchain_anthropic import ChatAnthropic
 from tavily import AsyncTavilyClient
 import os
@@ -111,6 +110,7 @@ class BaseResearcher:
             return {}
             
         try:
+            print(f"\nExecuting search for query: {query}")
             search_results = await self.tavily_client.search(
                 query,
                 search_depth=search_depth,
@@ -118,14 +118,38 @@ class BaseResearcher:
                 max_results=5  # Limit results per query for speed
             )
             
+            if not search_results.get('results'):
+                print("No results returned from search")
+                return {}
+                
+            print(f"Search returned {len(search_results['results'])} results")
+            
             results = {}
             for result in search_results.get('results', []):
-                results[result['url']] = {
-                    'title': result.get('title'),
-                    'content': result.get('content'),
-                    'score': result.get('score'),
-                    'query': query
+                # Ensure we have content to evaluate
+                content = result.get('content')
+                if not content:
+                    print(f"Warning: No content in result for {result.get('url')}")
+                    continue
+                    
+                url = result.get('url')
+                if not url:
+                    print("Warning: Result missing URL")
+                    continue
+                    
+                results[url] = {
+                    'title': result.get('title', ''),
+                    'content': content,  # This is the summary content for evaluation
+                    'score': result.get('score', 0.0),
+                    'query': query,
+                    'url': url  # Store URL in document for reference
                 }
+                
+                print(f"\nFound document: {result.get('title', 'No title')}")
+                print(f"Content length: {len(content)}")
+                print(f"Initial relevance: {result.get('score', 0.0)}")
+            
+            print(f"\nQuery '{query}' returned {len(results)} valid documents with content")
             return results
         except Exception as e:
             print(f"Error searching query '{query}': {e}")
@@ -143,13 +167,20 @@ class BaseResearcher:
             print("No valid queries to search")
             return {}
             
+        print(f"\nExecuting {len(valid_queries)} search queries in parallel")
+        
         # Run all searches in parallel
         search_tasks = [self.search_single_query(query, search_depth) for query in valid_queries]
         results_list = await asyncio.gather(*search_tasks)
         
         # Merge all results
         merged_results = {}
+        total_docs = 0
         for results in results_list:
             merged_results.update(results)
+            total_docs += len(results)
+        
+        print(f"\nTotal documents found across all queries: {total_docs}")
+        print(f"Unique documents after merging: {len(merged_results)}")
         
         return merged_results 

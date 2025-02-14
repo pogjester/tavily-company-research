@@ -1,10 +1,9 @@
-from langchain_core.messages import SystemMessage, AIMessage
+from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph
-from langgraph.checkpoint.memory import MemorySaver
 from typing import Dict, Any, AsyncIterator
 
 # Import research state class
-from .classes.state import ResearchState, InputState, OutputState
+from .classes.state import ResearchState, InputState
 
 # Import node classes
 from .nodes import GroundingNode
@@ -16,9 +15,11 @@ from .nodes.researchers import (
 )
 from .nodes.collector import Collector
 from .nodes.curator import Curator
+from .nodes.enricher import Enricher
 from .nodes.briefing import Briefing
 from .nodes.editor import Editor
 from .nodes.output import OutputNode
+
 class Graph:
     def __init__(self, company=None, url=None, hq_location=None, industry=None):
         # Initialize InputState
@@ -40,6 +41,7 @@ class Graph:
         self.company_analyst = CompanyAnalyzer()
         self.collector = Collector()
         self.curator = Curator()
+        self.enricher = Enricher()
         self.briefing = Briefing()
         self.editor = Editor()
         self.output = OutputNode()
@@ -55,9 +57,11 @@ class Graph:
         self.workflow.add_node("company_analyst", self.company_analyst.run)
         self.workflow.add_node("collector", self.collector.run)
         self.workflow.add_node("curator", self.curator.run)
+        self.workflow.add_node("enricher", self.enricher.run)
         self.workflow.add_node("briefing", self.briefing.run)
         self.workflow.add_node("editor", self.editor.run)
         self.workflow.add_node("output", self.output.run)
+
         # Set up the workflow
         self.workflow.set_entry_point("grounding")
      
@@ -72,10 +76,13 @@ class Graph:
         # Collector feeds into curator
         self.workflow.add_edge("collector", "curator")
         
-        # Curator feeds into briefing
-        self.workflow.add_edge("curator", "briefing")
+        # Curator feeds into enricher
+        self.workflow.add_edge("curator", "enricher")
         
-        # Briefing feeds into compiler
+        # Enricher feeds into briefing
+        self.workflow.add_edge("enricher", "briefing")
+        
+        # Briefing feeds into editor
         self.workflow.add_edge("briefing", "editor")
 
         # Editor feeds into output

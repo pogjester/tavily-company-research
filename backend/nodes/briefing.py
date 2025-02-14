@@ -91,6 +91,14 @@ Use bullet points where appropriate for clarity. No explanation."""
             "hq_location": state.get('hq_location', 'Unknown')
         }
         
+        print(f"\n{'='*80}")
+        print(f"Available curated data for {company}:")
+        print(f"- curated_financial_data: {len(state.get('curated_financial_data', {}))}")
+        print(f"- curated_news_data: {len(state.get('curated_news_data', {}))}")
+        print(f"- curated_industry_data: {len(state.get('curated_industry_data', {}))}")
+        print(f"- curated_company_data: {len(state.get('curated_company_data', {}))}")
+        print(f"{'='*80}\n")
+        
         msg = [f"📋 Creating research briefings for {company}:"]
 
         # Process each category of curated data
@@ -121,7 +129,6 @@ Use bullet points where appropriate for clarity. No explanation."""
 
                 print(f"Curated data for {label}: {bool(curated_data)}")
                 print(f"Generated briefing for {category}: {briefing if curated_data else 'No briefing generated'}")
-                print(f"State after briefing generation: {state}")
             else:
                 msg.append(f"\n• No curated {label} documents available")
         

@@ -30,18 +30,23 @@ class CompanyAnalyzer(BaseResearcher):
         
         company_data = {}
         
-        # If we have site_scrape data, analyze it first
+        # If we have site_scrape data and company_url, analyze it first
         if site_scrape := state.get('site_scrape'):
-            msg += "\n📊 Including site scrape data in company analysis..."
-            company_data[InputState['company_url']] = {
-                'title': InputState['company'],
-                'raw_content': site_scrape
-            }
+            if company_url := state.get('company_url'):
+                msg += "\n📊 Including site scrape data in company analysis..."
+                company_data[company_url] = {
+                    'title': company,
+                    'raw_content': site_scrape,
+                    'source': 'company_website'
+                }
+            else:
+                msg += "\n⚠️ Site scrape data available but no company URL provided"
         
-        # Perform additional research
+        # Perform additional research with comprehensive search
         try:
             msg += f"\n🔍 Searching for company information using {len(queries)} queries..."
-            company_data = await self.search_documents(queries)
+            search_results = await self.search_documents(queries, search_depth="advanced")
+            company_data.update(search_results)
             
             msg += f"\n✅ Found {len(company_data)} relevant company documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
