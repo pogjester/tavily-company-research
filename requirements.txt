@@ -12,7 +12,7 @@ charset-normalizer==3.4.1
 click==8.1.8
 cohere==5.13.12
 colorama==0.4.6
-Flask==3.1.0
+Flask[async]==3.1.0
 fpdf==1.7.2
 frozenlist==1.5.0
 greenlet==3.1.1

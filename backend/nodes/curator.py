@@ -23,10 +23,14 @@ class Curator:
             
         # Add source query that found this document
         if query := doc.get('query'):
-            parts.append(f"Found via search: {query}")
+            parts.append(f"Search Query: {query}")
             
-        # Add the main content
-        if content := doc.get('content'):
+        # Try both content and raw_content
+        content = doc.get('content') or doc.get('raw_content', '')
+        if content:
+            # Truncate content if too long (Cohere has token limits)
+            if len(content) > 1000:
+                content = content[:1000] + "..."
             parts.append(f"Content: {content}")
             
         return "\n\n".join(parts)
@@ -34,19 +38,20 @@ class Curator:
     def format_query(self, base_query: str, context: Dict[str, str]) -> str:
         """Format a query for better relevance evaluation."""
         query_parts = [
-            f"Find information that is highly relevant to: {base_query}",
-            f"Company: {context.get('company', 'Unknown')}",
+            f"Find highly relevant and recent information about {context.get('company', 'Unknown')}.",
+            f"Specifically looking for: {base_query}",
+            f"Company: {context.get('company', 'Unknown')}"
         ]
         
         if industry := context.get('industry'):
             if industry != 'Unknown':
-                query_parts.append(f"Industry: {industry}")
+                query_parts.append(f"Industry focus: {industry}")
                 
         if location := context.get('hq_location'):
             if location != 'Unknown':
-                query_parts.append(f"Location: {location}")
+                query_parts.append(f"Company location: {location}")
                 
-        return " | ".join(query_parts)
+        return " ".join(query_parts)
 
     async def evaluate_documents(self, docs: list, query: str, context: Dict[str, str]) -> list:
         """Evaluate a list of documents' relevance using Cohere rerank."""
@@ -59,17 +64,18 @@ class Curator:
             print(f"\nDocument {i + 1}:")
             print(f"Keys: {doc.keys()}")
             print(f"Title: {doc.get('title', 'No title')}")
-            print(f"Has content: {bool(doc.get('content'))}")
-            if doc.get('content'):
-                print(f"Content length: {len(doc['content'])}")
+            content = doc.get('content') or doc.get('raw_content', '')
+            print(f"Has content: {bool(content)}")
+            if content:
+                print(f"Content length: {len(content)}")
 
-        # Prepare document content, using only the summary content for evaluation
+        # Prepare document content
         documents = []
         valid_docs = []  # Keep track of docs with content
         for doc in docs:
-            # Only use the content field for relevance evaluation
-            if not doc.get('content'):
-                print(f"Warning: No content field found in document with title: {doc.get('title', 'No title')}")
+            content = doc.get('content') or doc.get('raw_content', '')
+            if not content:
+                print(f"Warning: No content found in document with title: {doc.get('title', 'No title')}")
                 continue
                 
             # Format document for evaluation
@@ -94,7 +100,7 @@ class Curator:
             batch_original_docs = valid_docs[i:i + self.batch_size]
 
             try:
-                # Rerank the batch
+                # Rerank the batch with more emphasis on relevance
                 response = self.co.rerank(
                     model='rerank-v3.5',
                     query=formatted_query,
@@ -107,21 +113,28 @@ class Curator:
                     doc = batch_original_docs[result.index]
                     score = result.relevance_score
                     print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
-                    evaluated_doc = {
-                        **doc,
-                        "evaluation": {
-                            "overall_score": score,
-                            "query": formatted_query,
-                            "formatted_content": batch_docs[result.index]
+                    
+                    # Only keep documents with good relevance
+                    if score >= 0.5:
+                        evaluated_doc = {
+                            **doc,
+                            "evaluation": {
+                                "overall_score": score,
+                                "query": formatted_query,
+                                "formatted_content": batch_docs[result.index]
+                            }
                         }
-                    }
-                    evaluated_docs.append(evaluated_doc)
+                        evaluated_docs.append(evaluated_doc)
             except Exception as e:
                 print(f"Error during document evaluation: {e}")
-                # Skip documents that failed evaluation
                 continue
 
-        print(f"\nEvaluated {len(evaluated_docs)} documents successfully")
+        print(f"\nKept {len(evaluated_docs)} documents with scores >= 0.5")
+        if evaluated_docs:
+            print("\nTop scoring documents:")
+            for doc in sorted(evaluated_docs, key=lambda x: x['evaluation']['overall_score'], reverse=True)[:3]:
+                print(f"- {doc.get('title', 'No title')}: {doc['evaluation']['overall_score']:.3f}")
+        
         return evaluated_docs
 
     async def curate_data(self, state: ResearchState) -> ResearchState:
@@ -177,7 +190,7 @@ class Curator:
 
             # Filter documents with a score above 0.6
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.6}
+                           if doc['evaluation']['overall_score'] >= 0.5}
 
             print(f"\nRelevant {source_type} documents:")
             print(f"Total evaluated: {len(evaluated_docs)}")
