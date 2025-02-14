@@ -31,7 +31,8 @@ class NewsScanner(BaseResearcher):
                 news_data[company_url] = {
                     'title': company,
                     'raw_content': site_scrape,
-                    'source': 'company_website'
+                    'source': 'company_website',
+                    'query': 'Company website content'  # Add query for site scrape
                 }
             else:
                 msg += "\n⚠️ Site scrape data available but no company URL provided"
@@ -39,8 +40,13 @@ class NewsScanner(BaseResearcher):
         # Perform additional research with recent time filter
         try:
             msg += f"\n🔍 Searching for news coverage using {len(queries)} queries..."
-            search_results = await self.search_documents(queries, search_depth="advanced")
-            news_data.update(search_results)
+            # Store documents with their respective queries
+            for query in queries:
+                documents = await self.search_documents([query], search_depth="advanced")
+                if documents:  # Only process if we got results
+                    for url, doc in documents.items():
+                        doc['query'] = query  # Associate each document with its query
+                        news_data[url] = doc
             
             msg += f"\n✅ Found {len(news_data)} relevant news documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

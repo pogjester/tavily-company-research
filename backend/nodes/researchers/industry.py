@@ -33,7 +33,8 @@ class IndustryAnalyzer(BaseResearcher):
                 industry_data[company_url] = {
                     'title': company,
                     'raw_content': site_scrape,
-                    'source': 'company_website'
+                    'source': 'company_website',
+                    'query': 'Company website content'  # Add query for site scrape
                 }
             else:
                 msg += "\n⚠️ Site scrape data available but no company URL provided"
@@ -41,8 +42,13 @@ class IndustryAnalyzer(BaseResearcher):
         # Perform additional research with increased search depth
         try:
             msg += f"\n🔍 Searching for industry information using {len(queries)} queries..."
-            search_results = await self.search_documents(queries, search_depth="advanced")
-            industry_data.update(search_results)
+            # Store documents with their respective queries
+            for query in queries:
+                documents = await self.search_documents([query], search_depth="advanced")
+                if documents:  # Only process if we got results
+                    for url, doc in documents.items():
+                        doc['query'] = query  # Associate each document with its query
+                        industry_data[url] = doc
             
             msg += f"\n✅ Found {len(industry_data)} relevant industry documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

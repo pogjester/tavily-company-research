@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 import os
 
@@ -21,7 +21,7 @@ class Editor:
             api_key=openai_key
         )
 
-    async def edit_report(self, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
+    async def edit_report(self, briefings: Dict[str, str], context: Dict[str, Any], references: Dict[str, List[Dict[str, str]]]) -> str:
         """Compile briefings into a single cohesive report."""
         company = context['company']
         
@@ -53,12 +53,24 @@ Please compile these into a single cohesive report that:
 - Uses bullet points for key information
 - Preserves all important facts and insights
 - Ensure information is up to date and recent ({datetime.now().strftime("%Y-%m-%d")})
-- Includes a list of URL citations at the end
 
 Return the edited report with the same section structure but improved flow and clarity. No explanation."""
 
+        # Get edited content from LLM
         response = await self.llm.ainvoke(prompt)
-        return response.content
+        edited_content = response.content
+
+        # Format references section
+        reference_lines = ["\n\n📚 References\n" + "="*40]
+        for category, refs in references.items():
+            if refs:
+                reference_lines.append(f"\n{sections[category]} Sources:")
+                for ref in refs:
+                    reference_lines.append(f"• {ref['title']}")
+                    reference_lines.append(f"  {ref['url']}")
+        
+        # Combine content and references
+        return edited_content + "\n".join(reference_lines)
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
         """Compile all briefings into a final report."""
@@ -77,7 +89,11 @@ Return the edited report with the same section structure but improved flow and c
             state['report'] = None
         else:
             msg.append(f"\n• Found {len(briefings)} briefings to compile")
-            compiled_report = await self.edit_report(briefings, context)
+            
+            # Get references from state
+            references = state.get('references', {})
+            
+            compiled_report = await self.edit_report(briefings, context, references)
             state['report'] = compiled_report
             
             msg.append("\n✅ Report compilation complete")

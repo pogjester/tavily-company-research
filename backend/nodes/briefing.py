@@ -20,8 +20,8 @@ class Briefing:
             api_key=openai_key
         )
 
-    async def generate_category_briefing(self, docs: Dict[str, Any], category: str, context: Dict[str, Any]) -> str:
-        """Generate a concise briefing for a specific category of research. No explanation."""
+    async def generate_category_briefing(self, docs: Dict[str, Any], category: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a concise briefing for a specific category of research."""
         company = context['company']
         industry = context.get('industry', 'Unknown')
         
@@ -76,11 +76,14 @@ Documents to analyze:
 
 Create a clear, well-organized research briefing that extracts and synthesizes the key information.
 Focus on factual, verifiable information.
-Use bullet points where appropriate for clarity. No explanation."""
+Use bullet points where appropriate for clarity. No citations or explanation."""
         )
         
         response = await self.llm.ainvoke(prompt)
-        return response.content
+        return {
+            'content': response.content,
+            'references': list(docs.keys())  # Simply use the URLs as references
+        }
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
         """Create briefings for all research categories."""
@@ -110,6 +113,7 @@ Use bullet points where appropriate for clarity. No explanation."""
         }
         
         briefings = {}
+        references = {}
         for data_field, label in categories.items():
             curated_field = f'curated_{data_field}'
             curated_data = state.get(curated_field, {})
@@ -117,23 +121,25 @@ Use bullet points where appropriate for clarity. No explanation."""
             if curated_data:
                 msg.append(f"\n• Generating {label} briefing from {len(curated_data)} documents...")
                 category = data_field.replace('_data', '')
-                briefing = await self.generate_category_briefing(curated_data, category, context)
-                briefings[category] = briefing
+                result = await self.generate_category_briefing(curated_data, category, context)
+                briefings[category] = result['content']
+                references[category] = result['references']
                 msg.append("  ✓ Briefing generated")
                 
                 # Add the actual briefing content to the message
                 msg.append(f"\n{label} Briefing:")
                 msg.append("=" * 40)
-                msg.append(briefing)
+                msg.append(result['content'])
                 msg.append("=" * 40 + "\n")
 
                 print(f"Curated data for {label}: {bool(curated_data)}")
-                print(f"Generated briefing for {category}: {briefing if curated_data else 'No briefing generated'}")
+                print(f"Generated briefing for {category}: {result['content'] if curated_data else 'No briefing generated'}")
             else:
                 msg.append(f"\n• No curated {label} documents available")
         
-        # Update state with briefings and message
+        # Update state with briefings and references
         state['briefings'] = briefings
+        state['references'] = references
         
         # Add summary of generated briefings
         if briefings:

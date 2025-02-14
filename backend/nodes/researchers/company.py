@@ -1,7 +1,7 @@
 from langchain_core.messages import AIMessage
 from typing import Dict, Any
 
-from ...classes import ResearchState, InputState
+from ...classes import ResearchState
 from .base import BaseResearcher
 
 class CompanyAnalyzer(BaseResearcher):
@@ -37,7 +37,8 @@ class CompanyAnalyzer(BaseResearcher):
                 company_data[company_url] = {
                     'title': company,
                     'raw_content': site_scrape,
-                    'source': 'company_website'
+                    'source': 'company_website',
+                    'query': 'Company website content'  # Add query for site scrape
                 }
             else:
                 msg += "\n⚠️ Site scrape data available but no company URL provided"
@@ -45,8 +46,13 @@ class CompanyAnalyzer(BaseResearcher):
         # Perform additional research with comprehensive search
         try:
             msg += f"\n🔍 Searching for company information using {len(queries)} queries..."
-            search_results = await self.search_documents(queries, search_depth="advanced")
-            company_data.update(search_results)
+            # Store documents with their respective queries
+            for query in queries:
+                documents = await self.search_documents([query], search_depth="advanced")
+                if documents:  # Only process if we got results
+                    for url, doc in documents.items():
+                        doc['query'] = query  # Associate each document with its query
+                        company_data[url] = doc
             
             msg += f"\n✅ Found {len(company_data)} relevant company documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)

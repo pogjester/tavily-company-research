@@ -31,13 +31,19 @@ class FinancialAnalyst(BaseResearcher):
             msg += "\n📊 Including site scrape data in company analysis..."
             financial_data[InputState['company_url']] = {
                 'title': InputState['company'],
-                'raw_content': site_scrape
+                'raw_content': site_scrape,
+                'query': 'Site scrape data'  # Add a default query for site scrape
             }
         
         # Perform additional research
         try:
             msg += f"\n🔍 Searching for financial information using {len(queries)} queries..."
-            financial_data = await self.search_documents(queries)
+            # Store documents with their respective queries
+            for query in queries:
+                documents = await self.search_documents([query])
+                for url, doc in documents.items():
+                    doc['query'] = query  # Associate each document with its query
+                    financial_data[url] = doc
             
             msg += f"\n✅ Found {len(financial_data)} relevant financial documents"
             msg += f"\n🔍 Used queries: \n" + "\n".join(f"  • {q}" for q in queries)
