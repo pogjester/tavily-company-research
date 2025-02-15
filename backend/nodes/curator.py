@@ -90,7 +90,7 @@ class Curator:
                     print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
 
                     # Only keep documents with good relevance
-                    if score >= 0.6:
+                    if score >= 0.7:
                         evaluated_doc = {
                             **doc,
                             "evaluation": {

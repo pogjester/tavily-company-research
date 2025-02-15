@@ -1,12 +1,12 @@
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from typing import Dict, Any
+from typing import Dict, Any, Union, List
 import os
 
 from ..classes import ResearchState
 
 class Briefing:
-    """Creates briefings for each research category using curated documents."""
+    """Creates individual briefings for each research category."""
     
     def __init__(self) -> None:
         openai_key = os.getenv("OPENAI_API_KEY")
@@ -19,34 +19,43 @@ class Briefing:
             max_tokens=4096,
             api_key=openai_key
         )
+        
+        # Maximum content length per document (roughly 2000 tokens)
+        self.max_doc_length = 8000
 
-    async def generate_category_briefing(self, docs: Dict[str, Any], category: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate a concise briefing for a specific category of research."""
+    async def generate_category_briefing(self, docs: Union[Dict[str, Any], List[Dict[str, Any]]], category: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a briefing for a specific research category."""
         company = context['company']
         industry = context.get('industry', 'Unknown')
         
-        # Create category-specific prompts
+        # Create category-specific prompts with explicit formatting instructions
         prompts = {
             'financial': rf"""You are analyzing financial information about {company}.
 Based on the provided documents, create a concise financial briefing that covers:
 - Key financial metrics and performance
 - Market valuation and growth
 - Funding and investment status
-- Notable financial developments""",
+- Notable financial developments
+
+Format your response as a series of bullet points only. Do not include any introductions, transitions, or conclusions.""",
             
             'news': rf"""You are analyzing recent news about {company}.
 Based on the provided documents, create a concise news briefing that covers:
 - Major recent developments
 - Key announcements
 - Notable partnerships or deals
-- Public perception and media coverage""",
+- Public perception and media coverage
+
+Format your response as a series of bullet points only. Do not include any introductions, transitions, or conclusions.""",
             
             'industry': rf"""You are analyzing {company}'s position in the {industry} industry.
 Based on the provided documents, create a concise industry briefing that covers:
 - Market position and share
 - Competitive landscape
 - Industry trends and challenges
-- Regulatory environment""",
+- Regulatory environment
+
+Format your response as a series of bullet points only. Do not include any introductions, transitions, or conclusions.""",
             
             'company': rf"""You are analyzing core information about {company}.
 Based on the provided documents, create a concise company briefing that covers:
@@ -54,39 +63,97 @@ Based on the provided documents, create a concise company briefing that covers:
 - Business model and strategy
 - Leadership and management
 - Technology and innovation
-- Market presence and expansion"""
+- Market presence and expansion
+
+Format your response as a series of bullet points only. Do not include any introductions, transitions, or conclusions."""
         }
         
-        # Prepare documents for analysis
+        # Convert docs to a list of (url, doc) tuples
+        if isinstance(docs, dict):
+            items = list(docs.items())
+        else:  # List input
+            items = [(doc.get('url', f'doc_{i}'), doc) for i, doc in enumerate(docs)]
+        
+        # Prepare all documents for analysis
         doc_texts = []
-        for doc in docs.values():
+        references = []
+        total_length = 0
+        
+        # Sort items by evaluation score if available
+        sorted_items = sorted(
+            items,
+            key=lambda x: float(x[1].get('evaluation', {}).get('overall_score', '0')),
+            reverse=True
+        )
+        
+        for url, doc in sorted_items:
+            # Create reference first
+            ref_data = {
+                "url": str(url),
+                "title": str(doc.get('title', 'Untitled')),
+                "query": str(doc.get('query', 'General research')),
+                "source": str(doc.get('source', 'web_search')),
+                "score": str(doc.get('evaluation', {}).get('overall_score', '0'))
+            }
+            references.append(ref_data)
+            
+            # Process document content
             title = doc.get('title', '')
             content = doc.get('raw_content') or doc.get('content', '')
-            doc_texts.append(rf"Title: {title}\n\nContent: {content}")
-
-        # Build the final prompt
+            
+            # Truncate content if too long
+            if len(content) > self.max_doc_length:
+                content = content[:self.max_doc_length] + "... [content truncated]"
+            
+            doc_text = rf"Title: {title}\n\nContent: {content}"
+            doc_length = len(doc_text)
+            
+            # Only add document if we haven't exceeded ~32k tokens (128k chars)
+            if total_length + doc_length < 120000:  # Conservative limit
+                doc_texts.append(doc_text)
+                total_length += doc_length
+            else:
+                break  # Stop adding documents if we're approaching the context limit
+        
+        # Build the prompt with all documents
         separator = r"\n" + "-" * 40 + r"\n"
         prompt = (
             rf"""{prompts.get(category, 'Create a research briefing based on the provided documents.')}
 
-Documents to analyze:
+Analyze the following documents and extract key information:
 {separator}
 {separator.join(doc_texts)}
 {separator}
 
-Create a clear, well-organized research briefing that extracts and synthesizes the key information.
+Create a clear, well-organized set of bullet points that captures the key information.
 Focus on factual, verifiable information.
-Use bullet points where appropriate for clarity. No citations or explanation."""
+Do not include any introductions, transitions, or conclusions."""
         )
         
+        # Make a single API call for all documents
         response = await self.llm.ainvoke(prompt)
+        
+        # Extract bullet points
+        bullet_points = [
+            point.strip() for point in response.content.split('\n')
+            if point.strip() and point.strip().startswith('-')
+        ]
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_points = []
+        for point in bullet_points:
+            if point not in seen:
+                seen.add(point)
+                unique_points.append(point)
+        
         return {
-            'content': response.content,
-            'references': list(docs.keys())  # Simply use the URLs as references
+            "content": "\n".join(unique_points),
+            "references": references
         }
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
-        """Create briefings for all research categories."""
+        """Create individual briefings for all research categories."""
         company = state.get('company', 'Unknown Company')
         context = {
             "company": company,
@@ -95,15 +162,8 @@ Use bullet points where appropriate for clarity. No citations or explanation."""
         }
         
         print(f"\n{'='*80}")
-        print(f"Available curated data for {company}:")
-        print(f"- curated_financial_data: {len(state.get('curated_financial_data', {}))}")
-        print(f"- curated_news_data: {len(state.get('curated_news_data', {}))}")
-        print(f"- curated_industry_data: {len(state.get('curated_industry_data', {}))}")
-        print(f"- curated_company_data: {len(state.get('curated_company_data', {}))}")
-        print(f"{'='*80}\n")
+        print(f"Creating section briefings for {company}")
         
-        msg = [f"📋 Creating research briefings for {company}:"]
-
         # Process each category of curated data
         categories = {
             'financial_data': '💰 Financial',
@@ -114,53 +174,36 @@ Use bullet points where appropriate for clarity. No citations or explanation."""
         
         briefings = {}
         references = {}
+        msg = [f"📋 Creating section briefings for {company}:"]
+        
         for data_field, label in categories.items():
             curated_field = f'curated_{data_field}'
             curated_data = state.get(curated_field, {})
             
             if curated_data:
-                msg.append(f"\n• Generating {label} briefing from {len(curated_data)} documents...")
+                msg.append(f"\n• Processing {label} section ({len(curated_data)} documents)...")
                 category = data_field.replace('_data', '')
                 result = await self.generate_category_briefing(curated_data, category, context)
-                briefings[category] = result['content']
-                references[category] = result['references']
-                msg.append("  ✓ Briefing generated")
-                
-                # Add the actual briefing content to the message
-                msg.append(f"\n{label} Briefing:")
-                msg.append("=" * 40)
-                msg.append(result['content'])
-                msg.append("=" * 40 + "\n")
-
-                print(f"Curated data for {label}: {bool(curated_data)}")
-                print(f"Generated briefing for {category}: {result['content'] if curated_data else 'No briefing generated'}")
+                briefings[str(category)] = result['content']
+                references[str(category)] = result['references']
+                msg.append("  ✓ Section completed")
             else:
-                msg.append(f"\n• No curated {label} documents available")
+                msg.append(f"\n• No data available for {label} section")
         
-        # Update state with briefings and references
+        # Update state with section briefings and references
         state['briefings'] = briefings
         state['references'] = references
         
-        # Add summary of generated briefings
+        # Add processing summary
         if briefings:
-            msg.append("\n📊 Briefing Summary:")
-            msg.append(f"Generated {len(briefings)} briefings for {company}")
-            for category in briefings.keys():
-                msg.append(f"- {categories.get(category + '_data', category)} briefing completed")
+            msg.append(f"\n✓ Generated {len(briefings)} section briefings")
         else:
-            msg.append("\n⚠️ No briefings were generated due to lack of curated data")
+            msg.append("\n⚠️ No section briefings could be generated")
         
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
         
-        # Print briefings for immediate visibility
-        print(f"\n{'='*80}\n🔍 Generated Briefings for {company}:\n{'='*80}")
-        for category, content in briefings.items():
-            print(f"\n{categories.get(category + '_data', category)}:")
-            print("-" * 40)
-            print(content)
-            print("=" * 80)
         return state
 
     async def run(self, state: ResearchState) -> ResearchState:

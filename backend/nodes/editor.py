@@ -7,7 +7,7 @@ import os
 from ..classes import ResearchState
 
 class Editor:
-    """Compiles individual briefings into a concise cohesive document."""
+    """Compiles individual section briefings into a cohesive final report."""
     
     def __init__(self) -> None:
         openai_key = os.getenv("OPENAI_API_KEY")
@@ -22,8 +22,9 @@ class Editor:
         )
 
     async def edit_report(self, briefings: Dict[str, str], context: Dict[str, Any], references: Dict[str, List[Dict[str, str]]]) -> str:
-        """Compile briefings into a single cohesive report."""
+        """Compile section briefings into a final report."""
         company = context['company']
+        industry = context.get('industry', 'Unknown')
         
         sections = {
             'company': '🏢 Company Overview',
@@ -38,23 +39,28 @@ class Editor:
             if content := briefings.get(category):
                 formatted_briefings.append(f"{section_title}\n{'='*40}\n{content}\n")
         
-        prompt = rf"""You are compiling a comprehensive research report about {company}.
-I will provide you with four sections of research that have already been prepared.
+        prompt = rf"""You are creating the final research report about {company} in the {industry} industry.
+The following sections contain bullet-point information gathered from various sources.
 
-Here are the sections:
+{"\n\n".join(formatted_briefings)}
 
-{formatted_briefings}
+Create a well-structured final report that:
+1. Maintains the distinct sections with their original headers
+2. Preserves the bullet-point format within each section
+3. Ensures information flows logically within sections
+4. Removes any redundant points between sections
+5. Groups related points together within each section
+6. Maintains factual, concise language throughout
 
-Please compile these into a single cohesive report that:
-- Maintains the four distinct sections with their original headers
-- Removes repetitive / redundant information between sections
-- Ensures consistent style and formatting throughout
-- Improves clarity and readability
-- Uses bullet points for key information
-- Preserves all important facts and insights
-- Ensure information is up to date and recent ({datetime.now().strftime("%Y-%m-%d")})
+Format Requirements:
+- Keep the original section headers
+- Maintain bullet points (do not convert to paragraphs)
+- Do not add any introductions or conclusions
+- Do not add transitional text between sections
+- Keep each point clear and factual
+- Ensure information is current as of {datetime.now().strftime("%Y-%m-%d")}
 
-Return the edited report with the same section structure but improved flow and clarity. No explanation."""
+Return the final report maintaining the section structure and bullet-point format."""
 
         # Get edited content from LLM
         response = await self.llm.ainvoke(prompt)
@@ -65,15 +71,16 @@ Return the edited report with the same section structure but improved flow and c
         for category, refs in references.items():
             if refs:
                 reference_lines.append(f"\n{sections[category]} Sources:")
-                for ref in refs:
+                for ref in sorted(refs, key=lambda x: float(x['score']), reverse=True)[:5]:  # Top 5 sources per section
                     reference_lines.append(f"• {ref['title']}")
                     reference_lines.append(f"  {ref['url']}")
+                    reference_lines.append(f"  Score: {ref['score']}")
         
         # Combine content and references
         return edited_content + "\n".join(reference_lines)
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
-        """Compile all briefings into a final report."""
+        """Compile section briefings into a final report."""
         company = state.get('company', 'Unknown Company')
         context = {
             "company": company,
@@ -85,27 +92,25 @@ Return the edited report with the same section structure but improved flow and c
         
         briefings = state.get('briefings', {})
         if not briefings:
-            msg.append("\n⚠️ No briefings available to compile")
+            msg.append("\n⚠️ No section briefings available to compile")
             state['report'] = None
         else:
-            msg.append(f"\n• Found {len(briefings)} briefings to compile")
+            msg.append(f"\n• Found {len(briefings)} section briefings to compile")
             
             # Get references from state
             references = state.get('references', {})
             
+            # Compile the final report
             compiled_report = await self.edit_report(briefings, context, references)
             state['report'] = compiled_report
             
             msg.append("\n✅ Report compilation complete")
-            msg.append("\nFinal Report:")
-            msg.append("=" * 80)
-            msg.append(compiled_report)
-            msg.append("=" * 80)
             
-            # Print the compiled report for immediate visibility
-            print(f"\n{'='*80}\n📊 Compiled Report for {company}:\n{'='*80}")
-            print(compiled_report)
-            print("=" * 80)
+            # Print completion message
+            print(f"\n{'='*80}")
+            print(f"Report compilation completed for {company}")
+            print(f"Sections included: {', '.join(briefings.keys())}")
+            print(f"{'='*80}")
         
         # Update state with compilation message
         messages = state.get('messages', [])
