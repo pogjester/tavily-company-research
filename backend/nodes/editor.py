@@ -24,8 +24,8 @@ class Editor:
             api_key=openai_key
         )
 
-    async def edit_report(self, briefings: Dict[str, str], context: Dict[str, Any], references: Dict[str, List[Dict[str, str]]]) -> str:
-        """Compile section briefings into a final report."""
+    async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
+        """Compile section briefings into a final report and update the state."""
         company = context['company']
         industry = context.get('industry', 'Unknown')
         
@@ -81,67 +81,12 @@ Return the final report. No explanation."""
         edited_content = response.content
         
         logger.info(f"Received edited content from LLM ({len(edited_content)} characters)")
-
+        
         # Format references section
         reference_lines = ["\n\n📚 References\n" + "="*40 + "\n"]
-        
-        # Debug log the references
-        logger.info(f"References in state: {references}")
-        
-        # Collect all references into a single list
-        all_refs = []
-        for category, refs in references.items():
-            logger.info(f"Adding {len(refs)} references from {category}")
-            # Log some sample scores
-            if refs:
-                logger.info(f"Sample reference from {category}:")
-                logger.info(f"- Full reference data: {refs[0]}")
-                logger.info(f"- Score value: {refs[0].get('score', 'Not found')}")
-                logger.info(f"- Title: {refs[0].get('title', 'Not found')}")
-                logger.info(f"- URL: {refs[0].get('url', 'Not found')}")
-            all_refs.extend(refs)
-            
-        logger.info(f"Total references collected: {len(all_refs)}")
-        
-        # Sort all references by score
-        try:
-            sorted_refs = sorted(all_refs, key=lambda x: float(x.get('score', '0')), reverse=True)
-            logger.info(f"Successfully sorted {len(sorted_refs)} references")
-            
-            # Take top references
-            top_refs = sorted_refs[:10]  # Show top 10 most relevant sources
-            logger.info(f"Selected top {len(top_refs)} references")
-            
-            for ref in top_refs:
-                logger.info(f"Processing reference: {ref}")
-                try:
-                    score = float(ref.get('score', 0))
-                    score_display = f"  Relevance Score: {score:.2f}"
-                except (ValueError, TypeError):
-                    score_display = "  Relevance Score: N/A"
-                    
-                reference_lines.extend([
-                    f"• {ref.get('title', 'Untitled')}",
-                    f"  Source: {ref.get('source', 'Unknown')}",
-                    f"  URL: {ref.get('url', 'N/A')}",
-                    score_display,
-                    f"  Query: {ref.get('query', 'N/A')}",
-                    ""  # Add spacing between references
-                ])
-            
-        except Exception as e:
-            logger.error(f"Error processing references: {str(e)}")
-            logger.error("Falling back to unsorted references")
-            reference_lines.extend([
-                "No properly formatted references available.",
-                "Please check the source documents and evaluation scores.",
-                ""
-            ])
-        
-        # Debug log the reference lines
-        logger.info("Reference lines:")
-        logger.info("\n".join(reference_lines))
-        
+        for url in state.get('references', []):
+            reference_lines.append(f"• {url}")
+
         # Combine content and references
         final_report = edited_content + "\n".join(reference_lines)
         logger.info(f"Final report compiled with {len(final_report)} characters")
@@ -151,6 +96,9 @@ Return the final report. No explanation."""
         logger.info("-" * 50)
         logger.info(final_report)
         logger.info("-" * 50)
+        
+        # Update the state with the final report
+        state['report'] = final_report
         
         return final_report
 
@@ -175,26 +123,18 @@ Return the final report. No explanation."""
             logger.info(f"Found briefings for sections: {list(briefings.keys())}")
             
             # Get references from state
-            references = state.get('references', {})
-            logger.info(f"References found in state: {list(references.keys()) if references else 'None'}")
+            references = state.get('references', [])
+            logger.info(f"References found in state: {len(references)} items")
             
             # Debug log for references
             if references:
-                total_refs = sum(len(refs) for refs in references.values())
-                logger.info(f"Total references found: {total_refs}")
-                for category, refs in references.items():
-                    logger.info(f"References for {category}: {len(refs)} items")
-                    if refs:
-                        logger.info(f"Sample reference from {category}:")
-                        logger.info(f"Title: {refs[0].get('title', 'N/A')}")
-                        logger.info(f"URL: {refs[0].get('url', 'N/A')}")
-                        logger.info(f"Score: {refs[0].get('score', 'N/A')}")
+                logger.info(f"Sample reference: {references[0]}")
             else:
                 logger.error("No references found in state!")
                 logger.error(f"Available state keys: {list(state.keys())}")
             
             # Compile the final report
-            compiled_report = await self.edit_report(briefings, context, references)
+            compiled_report = await self.edit_report(state, briefings, context)
             
             if not compiled_report or not compiled_report.strip():
                 logger.error("Compiled report is empty!")

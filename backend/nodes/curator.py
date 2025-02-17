@@ -123,6 +123,7 @@ class Curator:
         }
 
         msg = [f"🔍 Curating research data for {company}"]
+        
 
         # Process each type of data
         data_types = {
@@ -143,6 +144,7 @@ class Curator:
             curation_tasks.append((data_field, source_type, data.keys(), docs))
 
         # Process all document types in parallel
+        all_urls = []
         for data_field, source_type, urls, docs in curation_tasks:
             msg.append(f"\n{data_types[data_field]}: Found {len(docs)} documents")
 
@@ -155,12 +157,14 @@ class Curator:
 
             # Filter documents with a score above threshold
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.6}
+                           if doc['evaluation']['overall_score'] >= 0.7}
 
             if relevant_docs:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
             else:
                 msg.append(f"  ⚠️ No documents met relevance threshold")
+            
+            all_urls.extend(urls)
 
             # Update state with curated data
             state[f'curated_{data_field}'] = relevant_docs
@@ -169,6 +173,9 @@ class Curator:
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
+        state['references'] = all_urls
+        messages.append(AIMessage(content=f"References: {state['references']}"))
+        print(f"References: {state['references']}")
 
         return state
 

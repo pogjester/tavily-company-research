@@ -57,18 +57,9 @@ Format your response as bullet points without introductions or conclusions."""
             reverse=True
         )
         
-        references = []
         doc_texts = []
         total_length = 0
         for url, doc in sorted_items:
-            # Build a reference entry
-            references.append({
-                "url": str(url),
-                "title": str(doc.get('title', 'Untitled')),
-                "query": str(doc.get('query', 'General research')),
-                "source": str(doc.get('source', 'web_search')),
-                "score": str(doc.get('evaluation', {}).get('overall_score', '0'))
-            })
             title = doc.get('title', '')
             content = doc.get('raw_content') or doc.get('content', '')
             if len(content) > self.max_doc_length:
@@ -94,11 +85,11 @@ Create a set of bullet points with factual, verifiable information without intro
             content = response.content.strip()
             if not content:
                 logger.error(f"Empty response from LLM for {category} briefing")
-                return {'content': '', 'references': []}
-            return {'content': content, 'references': references}
+                return {'content': ''}
+            return {'content': content}
         except Exception as e:
             logger.error(f"Error generating {category} briefing: {e}")
-            return {'content': '', 'references': []}
+            return {'content': ''}
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
         company = state.get('company', 'Unknown Company')
@@ -118,7 +109,6 @@ Create a set of bullet points with factual, verifiable information without intro
         }
         
         briefings = {}
-        all_references = {}
         summary = [f"Creating section briefings for {company}:"]
         
         for data_field, cat in categories.items():
@@ -130,7 +120,6 @@ Create a set of bullet points with factual, verifiable information without intro
                 result = await self.generate_category_briefing(curated_data, cat, context)
                 if result['content']:
                     briefings[cat] = result['content']
-                    all_references[cat] = result['references']
                     summary.append(f"Completed {data_field} ({len(result['content'])} characters)")
                 else:
                     summary.append(f"Failed to generate briefing for {data_field}")
@@ -138,7 +127,6 @@ Create a set of bullet points with factual, verifiable information without intro
                 summary.append(f"No data available for {data_field}")
         
         state['briefings'] = briefings
-        state['references'] = all_references
         state.setdefault('messages', []).append(AIMessage(content="\n".join(summary)))
         return state
 
