@@ -6,14 +6,20 @@ logger = logging.getLogger(__name__)
 
 class CustomPDF(FPDF):
     def __init__(self):
-        super().__init__()
-        self.set_left_margin(25)
-        self.set_right_margin(25)
-        self.set_auto_page_break(auto=True, margin=25)
-
+        super().__init__()  # Remove encoding parameter
+        self.set_left_margin(20)
+        self.set_right_margin(20)
+        self.set_auto_page_break(auto=True, margin=20)
+        self.last_section = None
+        
+    def header(self):
+        # Add some padding at the top of each page
+        self.ln(10)
+        
     def footer(self):
         self.set_y(-15)
         self.set_font("Arial", "I", 8)
+        self.set_text_color(128, 128, 128)  # Gray text for footer
         self.cell(0, 10, f"Page {self.page_no()}", 0, 0, "C")
 
 def remove_emojis(content):
@@ -39,6 +45,9 @@ def sanitize_content(content):
     # Replace problematic characters
     content = replace_problematic_characters(content)
     
+    # Replace bullet points with ASCII alternative
+    content = content.replace('•', '-')
+    
     # Remove any remaining non-ASCII characters
     content = ''.join(char if ord(char) < 128 else ' ' for char in content)
     
@@ -60,14 +69,14 @@ def replace_problematic_characters(content):
         '\u201c': '"',    # left double quote
         '\u201d': '"',    # right double quote
         '\u2026': '...',  # ellipsis
-        '\u2022': '*',    # bullet
+        '\u2022': '-',    # bullet
         '\u2122': '(TM)', # trademark
         '\u00a0': ' ',    # non-breaking space
         '\u200b': '',     # zero-width space
         '\u2212': '-',    # minus sign
-        '\u00b7': '*',    # middle dot
-        '\u2023': '*',    # triangular bullet
-        '\u25e6': '*',    # white bullet
+        '\u00b7': '-',    # middle dot
+        '\u2023': '-',    # triangular bullet
+        '\u25e6': '-',    # white bullet
         '\u2043': '-',    # hyphen bullet
         '\u2010': '-',    # hyphen
         '\u2011': '-',    # non-breaking hyphen
@@ -85,12 +94,6 @@ def generate_pdf_from_md(content, filename='output.pdf'):
         if not content or not content.strip():
             raise ValueError("No content provided for PDF generation")
         
-        # Log original content
-        logger.info("Original content:")
-        logger.info("-" * 80)
-        logger.info(content)
-        logger.info("-" * 80)
-            
         # Clean the content first
         content = sanitize_content(content)
         logger.info(f"Content sanitized, length: {len(content)}")
@@ -99,52 +102,79 @@ def generate_pdf_from_md(content, filename='output.pdf'):
         pdf.add_page()
         
         # Set initial font
-        pdf.set_font('Arial', '', 12)
+        pdf.set_font('Arial', '', 10)  # Base font size
         
         # Split content into lines and process each line
         lines = content.split('\n')
         logger.info(f"Processing {len(lines)} lines")
         
+        in_references = False  # Flag to track if we're in the references section
+        
         for line_num, line in enumerate(lines, 1):
-            line = line.strip()
-            if not line:
-                pdf.ln(8)  # Add space for empty lines
-                continue
-                
             try:
+                line = line.strip()
+                if not line:
+                    pdf.ln(3)  # Smaller spacing for empty lines
+                    continue
+                    
                 # Handle section headers
                 if any(marker in line for marker in ['Overview', 'Analysis', 'Developments', 'References']):
-                    pdf.set_font('Arial', 'B', 16)
-                    pdf.ln(8)
-                    pdf.cell(0, 10, line)
-                    pdf.ln(8)
-                    pdf.set_font('Arial', '', 12)
+                    # Add extra space before new section
+                    if pdf.get_y() > 30:  # Don't add space if near top of page
+                        pdf.ln(8)
+                    
+                    # Set flag for references section
+                    in_references = 'References' in line
+                    
+                    pdf.set_font('Arial', 'B', 14)
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.cell(0, 8, line)
+                    pdf.ln(6)
+                    pdf.last_section = line
+                    pdf.set_font('Arial', '', 10)
                     continue
                     
                 # Handle separator lines
                 if all(c == '=' for c in line):
+                    pdf.ln(2)
+                    pdf.set_draw_color(200, 200, 200)  # Light gray
+                    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 170, pdf.get_y())
                     pdf.ln(4)
                     continue
                     
-                # Handle bullet points
-                if line.startswith(('-', '*', '•')):
-                    pdf.set_font('Arial', '', 12)
+                # Handle bullet points and references
+                if line.startswith(('-', '*')):
+                    pdf.set_font('Arial', '', 10)
                     # Clean up bullet point format
-                    line = '* ' + line.lstrip('*- •').strip()
-                    # Add indentation for bullet points
-                    pdf.set_x(35)
-                    pdf.multi_cell(0, 8, line)
-                    pdf.set_x(25)
+                    line = '- ' + line.lstrip('*- ').strip()
+                    
+                    # Different indentation and styling for references
+                    if in_references:
+                        pdf.set_x(25)
+                        # Make URLs blue and underlined
+                        if 'URL:' in line:
+                            pdf.set_text_color(0, 0, 255)
+                            pdf.set_font('Arial', 'U', 9)
+                        else:
+                            pdf.set_text_color(0, 0, 0)
+                            pdf.set_font('Arial', '', 9)
+                    else:
+                        pdf.set_x(30)
+                        pdf.set_text_color(0, 0, 0)
+                    
+                    pdf.multi_cell(0, 5, line)
+                    pdf.set_x(20)
                     continue
                 
                 # Regular text
-                pdf.set_font('Arial', '', 12)
-                pdf.multi_cell(0, 8, line)
+                pdf.set_font('Arial', '', 10)
+                pdf.set_text_color(0, 0, 0)
+                pdf.multi_cell(0, 5, line)
                 
             except Exception as e:
                 logger.error(f"Error processing line {line_num}: {line}")
                 logger.error(f"Error details: {str(e)}")
-                raise
+                continue  # Continue with next line instead of failing completely
             
         logger.info("Saving PDF file...")
         pdf.output(filename)

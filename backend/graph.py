@@ -1,6 +1,7 @@
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph
 from typing import Dict, Any, AsyncIterator
+import logging
 
 # Import research state class
 from .classes.state import ResearchState, InputState
@@ -19,6 +20,8 @@ from .nodes.enricher import Enricher
 from .nodes.briefing import Briefing
 from .nodes.editor import Editor
 from .nodes.output import OutputNode
+
+logger = logging.getLogger(__name__)
 
 class Graph:
     def __init__(self, company=None, url=None, hq_location=None, industry=None):
@@ -89,15 +92,7 @@ class Graph:
         self.workflow.add_edge("editor", "output")
 
     async def run(self, config: Dict[str, Any], thread: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
-        """Run the graph with the given configuration.
-        
-        Args:
-            config: Configuration for the graph run
-            thread: Thread configuration for state persistence
-        
-        Yields:
-            Dict containing the current state of the graph
-        """
+        """Run the graph with the given configuration."""
         # Update state with config if provided
         if config:
             self.input_state.update(config)
@@ -105,20 +100,15 @@ class Graph:
         # Compile the graph
         graph = self.workflow.compile()
         
-        # Track the full state
-        full_state = dict(self.input_state)
+        # Log initial state
+        logger.debug(f"Initial state: {self.input_state}")
         
         # Execute the graph asynchronously
         async for state_update in graph.astream(self.input_state, thread):
-            # Extract actual data from node outputs
-            for node_name, node_data in state_update.items():
-                if isinstance(node_data, dict):
-                    # Skip the node name and just update with the data
-                    full_state.update(node_data)
-                else:
-                    # If it's not a dict, keep the node name as the key
-                    full_state[node_name] = node_data
-            yield full_state
+            # Log state update
+            logger.debug(f"State update: {state_update}")
+            # Just yield the state - ResearchState handles the updates
+            yield state_update
 
     def compile(self):
         """Compile the graph for execution."""
