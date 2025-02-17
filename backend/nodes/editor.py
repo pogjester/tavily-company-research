@@ -3,6 +3,9 @@ from langchain_openai import ChatOpenAI
 from typing import Dict, Any, List
 from datetime import datetime
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from ..classes import ResearchState
 
@@ -26,6 +29,9 @@ class Editor:
         company = context['company']
         industry = context.get('industry', 'Unknown')
         
+        logger.info(f"Starting report compilation for {company}")
+        logger.info(f"Available briefing sections: {list(briefings.keys())}")
+        
         sections = {
             'company': '🏢 Company Overview',
             'industry': '🏭 Industry Analysis',
@@ -37,7 +43,16 @@ class Editor:
         formatted_briefings = []
         for category, section_title in sections.items():
             if content := briefings.get(category):
+                logger.info(f"Adding {section_title} section with {len(content)} characters")
                 formatted_briefings.append(f"{section_title}\n{'='*40}\n{content}\n")
+            else:
+                logger.info(f"Missing {section_title} section")
+        
+        if not formatted_briefings:
+            logger.error("No briefing sections available to compile!")
+            return ""
+            
+        logger.info(f"Compiled {len(formatted_briefings)} sections for editing")
         
         prompt = rf"""You are creating the final research report about {company} in the {industry} industry.
 The following sections contain bullet-point information gathered from various sources.
@@ -63,21 +78,35 @@ Format Requirements:
 Return the final report maintaining the section structure and bullet-point format."""
 
         # Get edited content from LLM
+        logger.info("Sending content to LLM for editing")
         response = await self.llm.ainvoke(prompt)
         edited_content = response.content
+        
+        logger.info(f"Received edited content from LLM ({len(edited_content)} characters)")
 
         # Format references section
         reference_lines = ["\n\n📚 References\n" + "="*40]
         for category, refs in references.items():
             if refs:
-                reference_lines.append(f"\n{sections[category]} Sources:")
-                for ref in sorted(refs, key=lambda x: float(x['score']), reverse=True)[:5]:  # Top 5 sources per section
-                    reference_lines.append(f"• {ref['title']}")
-                    reference_lines.append(f"  {ref['url']}")
-                    reference_lines.append(f"  Score: {ref['score']}")
+                reference_lines.append(f"\n{sections.get(category, category.title())} Sources:")
+                for ref in sorted(refs, key=lambda x: float(x.get('score', '0')), reverse=True)[:5]:  # Top 5 sources per section
+                    reference_lines.append(f"• {ref.get('title', 'Untitled')}")
+                    reference_lines.append(f"  URL: {ref.get('url', 'N/A')}")
+                    if score := ref.get('score'):
+                        reference_lines.append(f"  Relevance Score: {score}")
+                reference_lines.append("")  # Add spacing between sections
         
         # Combine content and references
-        return edited_content + "\n".join(reference_lines)
+        final_report = edited_content + "\n".join(reference_lines)
+        logger.info(f"Final report compiled with {len(final_report)} characters")
+        
+        # Log the first 500 characters of the report for verification
+        logger.info("Final report:")
+        logger.info("-" * 50)
+        logger.info(final_report)
+        logger.info("-" * 50)
+        
+        return final_report
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
         """Compile section briefings into a final report."""
@@ -94,22 +123,31 @@ Return the final report maintaining the section structure and bullet-point forma
         if not briefings:
             msg.append("\n⚠️ No section briefings available to compile")
             state['report'] = None
+            logger.error("No briefings found in state")
         else:
             msg.append(f"\n• Found {len(briefings)} section briefings to compile")
+            logger.info(f"Found briefings for sections: {list(briefings.keys())}")
             
             # Get references from state
             references = state.get('references', {})
             
             # Compile the final report
             compiled_report = await self.edit_report(briefings, context, references)
-            state['report'] = compiled_report
             
-            msg.append("\n✅ Report compilation complete")
+            if not compiled_report or not compiled_report.strip():
+                logger.error("Compiled report is empty!")
+                state['report'] = None
+                msg.append("\n⚠️ Error: Failed to generate report content")
+            else:
+                state['report'] = compiled_report
+                logger.info(f"Successfully compiled report with {len(compiled_report)} characters")
+                msg.append("\n✅ Report compilation complete")
             
             # Print completion message
             print(f"\n{'='*80}")
             print(f"Report compilation completed for {company}")
             print(f"Sections included: {', '.join(briefings.keys())}")
+            print(f"Report length: {len(compiled_report)} characters")
             print(f"{'='*80}")
         
         # Update state with compilation message

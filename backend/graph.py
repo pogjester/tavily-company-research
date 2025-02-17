@@ -105,9 +105,20 @@ class Graph:
         # Compile the graph
         graph = self.workflow.compile()
         
+        # Track the full state
+        full_state = dict(self.input_state)
+        
         # Execute the graph asynchronously
-        async for state in graph.astream(self.input_state, thread):
-            yield state
+        async for state_update in graph.astream(self.input_state, thread):
+            # Extract actual data from node outputs
+            for node_name, node_data in state_update.items():
+                if isinstance(node_data, dict):
+                    # Skip the node name and just update with the data
+                    full_state.update(node_data)
+                else:
+                    # If it's not a dict, keep the node name as the key
+                    full_state[node_name] = node_data
+            yield full_state
 
     def compile(self):
         """Compile the graph for execution."""

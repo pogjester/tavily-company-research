@@ -62,15 +62,29 @@ async def research():
         results = []
         final_state = None
         async for state in graph.run({}, {}):
-            logger.info(f"Received state update: {state.keys()}")
+            logger.info(f"Received state update with keys: {list(state.keys())}")
+            
+            # Log briefings if they exist
+            if briefings := state.get('briefings'):
+                logger.info(f"Found briefings for sections: {list(briefings.keys())}")
+                for section, content in briefings.items():
+                    logger.info(f"{section} briefing length: {len(content)} characters")
+            
+            # Log report if it exists
+            if report := state.get('report'):
+                logger.info(f"Found report with length: {len(report)} characters")
+            
             if messages := state.get('messages', []):
                 results.append(messages[-1].content)
                 logger.info(f"Added message: {messages[-1].content}")
             final_state = state
 
         if not final_state:
+            logger.error("No final state received from pipeline")
             return jsonify({"error": "Research pipeline failed"}), 500
-
+            
+        logger.info(f"Pipeline completed. Final state contains keys: {list(final_state.keys())}")
+        
         # Get the report content
         report_content = final_state.get('report', '')
         
@@ -83,7 +97,14 @@ async def research():
         
         if not report_content or not report_content.strip():
             logger.error("❌ Report content is empty or whitespace only!")
-            logger.error("Final state keys available:", list(final_state.keys()))
+            logger.error(f"Final state keys available: {list(final_state.keys())}")
+            logger.error("Checking briefings in final state...")
+            if briefings := final_state.get('briefings', {}):
+                logger.error(f"Found briefings for sections: {list(briefings.keys())}")
+                for section, content in briefings.items():
+                    logger.error(f"{section} briefing length: {len(content)} characters")
+            else:
+                logger.error("No briefings found in final state")
             return jsonify({"error": "No report content generated"}), 500
             
         print(report_content)
@@ -124,9 +145,9 @@ async def research():
         try:
             # Debug log the content being sent to PDF generator
             logger.info(f"Generating PDF with content length: {len(report_content)} characters")
-            logger.info("First 500 characters of report:")
+            logger.info("Final Report:")
             logger.info("-" * 50)
-            logger.info(report_content[:500])
+            logger.info(report_content)
             logger.info("-" * 50)
             
             generate_pdf_from_md(report_content, pdf_path)

@@ -90,7 +90,7 @@ class Curator:
                     print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
 
                     # Only keep documents with good relevance
-                    if score >= 0.7:
+                    if score >= 0.65:
                         evaluated_doc = {
                             **doc,
                             "evaluation": {
@@ -104,7 +104,7 @@ class Curator:
             print(f"Error during document evaluation: {e}")
             return []
 
-        print(f"\nKept {len(evaluated_docs)} documents with scores >= 0.5")
+        print(f"\nKept {len(evaluated_docs)} documents with scores >= 0.65")
         if evaluated_docs:
             print("\nTop scoring documents:")
             for doc in sorted(evaluated_docs, key=lambda x: x['evaluation']['overall_score'], reverse=True)[:3]:

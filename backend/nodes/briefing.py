@@ -2,8 +2,11 @@ from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 from typing import Dict, Any, Union, List
 import os
+import logging
 
 from ..classes import ResearchState
+
+logger = logging.getLogger(__name__)
 
 class Briefing:
     """Creates individual briefings for each research category."""
@@ -27,6 +30,9 @@ class Briefing:
         """Generate a briefing for a specific research category."""
         company = context['company']
         industry = context.get('industry', 'Unknown')
+        
+        logger.info(f"Generating {category} briefing for {company}")
+        logger.info(f"Processing {len(docs)} documents")
         
         # Create category-specific prompts with explicit formatting instructions
         prompts = {
@@ -130,27 +136,31 @@ Focus on factual, verifiable information.
 Do not include any introductions, transitions, or conclusions."""
         )
         
-        # Make a single API call for all documents
-        response = await self.llm.ainvoke(prompt)
-        
-        # Extract bullet points
-        bullet_points = [
-            point.strip() for point in response.content.split('\n')
-            if point.strip() and point.strip().startswith('-')
-        ]
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_points = []
-        for point in bullet_points:
-            if point not in seen:
-                seen.add(point)
-                unique_points.append(point)
-        
-        return {
-            "content": "\n".join(unique_points),
-            "references": references
-        }
+        try:
+            logger.info("Sending content to LLM for analysis")
+            response = await self.llm.ainvoke(prompt)
+            content = response.content.strip()
+            
+            if not content:
+                logger.error(f"Received empty content from LLM for {category} briefing")
+                return {'content': '', 'references': []}
+                
+            logger.info(f"Generated {category} briefing with {len(content)} characters")
+            
+            # Log a preview of the content
+            logger.info("First 500 characters of the briefing:")
+            logger.info("-" * 50)
+            logger.info(content[:500])
+            logger.info("-" * 50)
+            
+            return {
+                'content': content,
+                'references': references
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating {category} briefing: {str(e)}")
+            return {'content': '', 'references': []}
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
         """Create individual briefings for all research categories."""
@@ -161,6 +171,7 @@ Do not include any introductions, transitions, or conclusions."""
             "hq_location": state.get('hq_location', 'Unknown')
         }
         
+        logger.info(f"Starting briefing generation for {company}")
         print(f"\n{'='*80}")
         print(f"Creating section briefings for {company}")
         
@@ -181,14 +192,22 @@ Do not include any introductions, transitions, or conclusions."""
             curated_data = state.get(curated_field, {})
             
             if curated_data:
+                logger.info(f"Processing {label} section ({len(curated_data)} documents)")
                 msg.append(f"\n• Processing {label} section ({len(curated_data)} documents)...")
                 category = data_field.replace('_data', '')
                 result = await self.generate_category_briefing(curated_data, category, context)
-                briefings[str(category)] = result['content']
-                references[str(category)] = result['references']
-                msg.append("  ✓ Section completed")
+                
+                if result['content']:
+                    briefings[str(category)] = result['content']
+                    references[str(category)] = result['references']
+                    msg.append(f"  ✓ Section completed ({len(result['content'])} characters)")
+                    logger.info(f"Generated {category} briefing with {len(result['content'])} characters")
+                else:
+                    msg.append("  ⚠️ Failed to generate section content")
+                    logger.error(f"Failed to generate content for {category} section")
             else:
                 msg.append(f"\n• No data available for {label} section")
+                logger.warning(f"No curated data found for {label} section")
         
         # Update state with section briefings and references
         state['briefings'] = briefings
@@ -197,8 +216,14 @@ Do not include any introductions, transitions, or conclusions."""
         # Add processing summary
         if briefings:
             msg.append(f"\n✓ Generated {len(briefings)} section briefings")
+            logger.info(f"Successfully generated {len(briefings)} section briefings")
+            
+            # Log briefing lengths
+            for category, content in briefings.items():
+                logger.info(f"{category} briefing length: {len(content)} characters")
         else:
             msg.append("\n⚠️ No section briefings could be generated")
+            logger.error("Failed to generate any section briefings")
         
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))

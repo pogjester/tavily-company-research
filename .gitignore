@@ -1,5 +1,6 @@
 # Environment and secrets
 .env
+reports/*
 
 # Python
 __pycache__/
