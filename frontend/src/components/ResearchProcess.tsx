@@ -31,35 +31,6 @@ export function ResearchProcess({
   const resultRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to extract queries for each analyst
-  const getQueriesForAnalyst = (analyst: string) => {
-    if (!status) return [];
-
-    // If we have completed research, use the structured queries
-    if (status.status === "completed" && status.result?.analyst_queries) {
-      return (
-        status.result.analyst_queries[
-          analyst as keyof typeof status.result.analyst_queries
-        ] || []
-      );
-    }
-
-    // Otherwise, extract from debug messages for real-time updates
-    return status.debug_info
-      .filter((info) => info.message.includes(analyst))
-      .map((info) => {
-        const match = info.message.match(/Used queries:\s*(.+)/);
-        if (match) {
-          return match[1]
-            .split("•")
-            .map((q) => q.trim())
-            .filter(Boolean);
-        }
-        return [];
-      })
-      .flat();
-  };
-
   const processes = [
     {
       name: "Financial Analyst",

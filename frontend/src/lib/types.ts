@@ -1,47 +1,82 @@
-// Request interface - matches the data structure sent to /research POST endpoint
-export interface ResearchRequest {
-  company: string;
-  company_url?: string;
-  industry?: string;
-  hq_location?: string;
-}
-
-// Response from initial research request
-export interface ResearchResponse {
-  status: string;
-  job_id: string;
-  message: string;
-  polling_url: string;
-}
-
-// Debug information structure for progress updates
-export interface DebugInfo {
+// Base WebSocket message structure
+export interface WebSocketMessage {
+  type: string;
   timestamp: string;
-  message: string;
+  [key: string]: unknown;
 }
 
-// Research results structure when job is completed
-export interface ResearchResult {
-  results: string[];
-  report: string;
-  pdf_url: string;
-  sections_completed: string[];
-  total_references: number;
-  completion_time: string;
-  analyst_queries: {
-    "Financial Analyst": string[];
-    "Industry Analyst": string[];
-    "Company Analyst": string[];
-    "News Scanner": string[];
-  };
+export interface ApiError {
+  detail: string;
+  code?: number;
+  context?: Record<string, unknown>;
 }
 
-// Status response from /research/status/<job_id> endpoint
-export interface ResearchStatus {
-  status: "pending" | "processing" | "completed" | "failed";
-  progress: number;
-  debug_info: DebugInfo[];
-  last_update: string;
-  result: ResearchResult | null;
-  error: string | null;
-}
+// Phase and type definitions
+
+export type GroundingUpdateSubtype =
+  | "site_scrape_start"
+  | "site_scrape_progress"
+  | "site_scrape_complete"
+  | "site_scrape_error"
+  | "site_scrape_skip"
+  | "grounding_complete"
+  | "research_start";
+
+export type ResearchPhase =
+  | "idle"
+  | "initializing"
+  | "grounding"
+  | "researching"
+  | "analyzing"
+  | "generating"
+  | "completed"
+  | "error";
+
+export type ResearchNode =
+  | "grounding"
+  | "financial_analyst"
+  | "industry_analyst"
+  | "company_analyst"
+  | "news_scanner"
+  | "collector"
+  | "curator"
+  | "enricher"
+  | "briefing"
+  | "editor"
+  | "output";
+
+export type NodeStatus =
+  | "idle"
+  | "processing"
+  | "completed"
+  | "error"
+  | "skipped";
+
+export type ResearchMessage = {
+  timestamp: string;
+  node: ResearchNode;
+} & ( // Grounding Node Messages
+  | { type: "scraping_start"; url: string }
+  | { type: "scraping_progress"; progress: number; contentPreview: string }
+  | { type: "scraping_complete"; contentLength: number }
+  | { type: "scraping_error"; error: string }
+
+  // Financial Analyst Messages
+  | { type: "query_generation"; queries: string[] }
+  | { type: "document_analysis"; documentsProcessed: number }
+
+  // Industry Analyst Messages
+  | { type: "market_research"; insights: string[] }
+
+  // Collector Node Messages
+  | { type: "data_collection"; totalSources: number }
+
+  // Curator Node Messages
+  | { type: "data_filtering"; relevantSources: number }
+
+  // Common Messages
+  | { type: "node_start" }
+  | { type: "node_complete"; result: any }
+  | { type: "node_error"; error: string }
+  | { type: "node_progress"; progress: number }
+);
