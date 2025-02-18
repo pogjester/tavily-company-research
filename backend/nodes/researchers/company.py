@@ -14,7 +14,7 @@ class CompanyAnalyzer(BaseResearcher):
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
-        Focus on company fundamentals such as:
+        Generate queries on the company fundamentals of {company} in the {industry} industry such as:
         - Core products and services
         - Company history and milestones
         - Leadership and management team
@@ -37,7 +37,7 @@ class CompanyAnalyzer(BaseResearcher):
                     'title': company,
                     'raw_content': site_scrape,
                     'source': 'company_website',
-                    'query': 'Company website content'
+                    'query': f'Information on {company}'
                 }
         
         # Perform additional research with comprehensive search

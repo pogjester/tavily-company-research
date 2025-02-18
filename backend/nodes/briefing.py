@@ -33,16 +33,16 @@ class Briefing:
 
         prompts = {
             'financial': f"""You are analyzing financial information about {company}.
-Based on the provided documents, create a concise briefing covering key financial metrics, market valuation, funding status, and notable developments.
+Based on the provided documents, create a concise briefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any information about the industry or the company.
 Format your response as bullet points without introductions or conclusions.""",
             'news': f"""You are analyzing recent news about {company}.
-Based on the provided documents, create a concise briefing covering major developments, key announcements, partnerships, and public perception.
+Based on the provided documents, create a concise briefing covering major developments, key announcements, partnerships, and public perception. Don't provide any generic descriptions of the industry or the company.
 Format your response as bullet points without introductions or conclusions.""",
             'industry': f"""You are analyzing {company}'s position in the {industry} industry.
-Based on the provided documents, create a concise briefing covering market position, competitive landscape, trends, and regulatory environment.
+Based on the provided documents, create a concise briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. 
 Format your response as bullet points without introductions or conclusions.""",
             'company': f"""You are analyzing core information about {company}.
-Based on the provided documents, create a concise briefing covering products, business model, leadership, technology, and market presence.
+Based on the provided documents, create a concise briefing covering products, business model, leadership, technology, and market presence. Start at the most generic level and work your way down to the most specific.
 Format your response as bullet points without introductions or conclusions."""
         }
         
@@ -74,7 +74,7 @@ Format your response as bullet points without introductions or conclusions."""
         separator = "\n" + "-" * 40 + "\n"
         prompt = f"""{prompts.get(category, 'Create a research briefing based on the provided documents.')}
 
-Analyze the following documents and extract key information:
+Analyze the following documents and extract key information about {company} in the {industry} industry:
 {separator}{separator.join(doc_texts)}{separator}
 
 Create a set of bullet points with factual, verifiable information without introductions or conclusions."""

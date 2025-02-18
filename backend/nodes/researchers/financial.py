@@ -32,7 +32,7 @@ class FinancialAnalyst(BaseResearcher):
             financial_data[InputState['company_url']] = {
                 'title': InputState['company'],
                 'raw_content': site_scrape,
-                'query': 'Site scrape data'  # Add a default query for site scrape
+                'query': f'Financial information on {company}'  # Add a default query for site scrape
             }
         
         # Perform additional research

@@ -15,7 +15,7 @@ class IndustryAnalyzer(BaseResearcher):
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
-        Focus on industry analysis such as:
+        Generate queries on the industry analysis of {company} in the {industry} industry such as:
         - Market position and share
         - Competitive landscape
         - Industry trends and challenges
@@ -33,7 +33,7 @@ class IndustryAnalyzer(BaseResearcher):
                     'title': company,
                     'raw_content': site_scrape,
                     'source': 'company_website',
-                    'query': 'Company website content'
+                    'query': f'Industry analysis on {company}'
                 }
         
         # Perform additional research with increased search depth

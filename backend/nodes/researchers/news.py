@@ -31,7 +31,7 @@ class NewsScanner(BaseResearcher):
                     'title': company,
                     'raw_content': site_scrape,
                     'source': 'company_website',
-                    'query': 'Company website content'
+                    'query': f'News on {company}'
                 }
         
         # Perform additional research with recent time filter

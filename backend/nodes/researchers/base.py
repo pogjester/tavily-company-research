@@ -35,8 +35,15 @@ class BaseResearcher:
                 "role": "user",
                 "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
 {prompt}
-Provide exactly 4 search queries (one per line) that include the company name and {current_year}. 
-Each query should be specific and focused on gathering relevant information.
+
+Important Guidelines:
+- Focus ONLY on company-specific information
+- DO NOT include general economic trends, GDP, or macro-economic factors
+- Each query must be about {company} specifically
+- Include the year {current_year} in each query
+- Make queries precise and targeted to the company
+
+Provide exactly 4 search queries (one per line).
 Do not number the queries or add any extra text - just output exactly 4 lines."""
             }
         ]

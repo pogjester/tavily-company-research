@@ -28,6 +28,7 @@ class Editor:
         """Compile section briefings into a final report and update the state."""
         company = context.get('company', 'Unknown')
         industry = context.get('industry', 'Unknown')
+        hq = context.get('hq_location', 'Unknown')
         
         logger.info(f"Starting report compilation for {company}")
         logger.info(f"Available briefing sections: {list(briefings.keys())}")
@@ -54,7 +55,7 @@ class Editor:
             
         logger.info(f"Compiled {len(formatted_briefings)} sections for editing")
         
-        prompt = f"""You are creating the final research report about {company} in the {industry} industry.
+        prompt = f"""You are creating the final research report about {company} in the {industry} industry (HQ:{hq}).
 The following sections contain bullet-point information gathered from various sources.
 
 {chr(10).join(formatted_briefings)}
@@ -65,7 +66,7 @@ Create a well-structured final report that:
 3. Removes any redundant or repetitive points between sections
 4. Groups related points together within each section
 5. Maintains factual, concise language throughout
-6. Eliminates any points that are not relevant to the company
+6. Eliminates any points that are not relevant to {company} in the {industry} industry
 
 Format Requirements:
 - Do not add any introductions or conclusions
