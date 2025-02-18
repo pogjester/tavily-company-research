@@ -1,5 +1,5 @@
-import { Moon, Sun, Github } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { Moon, Sun, Github } from "lucide-react";
+import { cn } from "../lib/utils";
 
 interface HeaderProps {
   darkMode: boolean;
@@ -10,13 +10,13 @@ export function Header({ darkMode, onDarkModeToggle }: HeaderProps) {
   return (
     <div className="flex justify-end items-center gap-4 mb-4">
       <a
-        href="https://github.com/yourusername"
+        href="https://github.com/pogjester"
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
           "p-2 rounded-full transition-colors duration-200",
-          darkMode 
-            ? "bg-gray-700 hover:bg-gray-600 text-white" 
+          darkMode
+            ? "bg-gray-700 hover:bg-gray-600 text-white"
             : "bg-white hover:bg-gray-100 text-gray-800"
         )}
       >
@@ -26,8 +26,8 @@ export function Header({ darkMode, onDarkModeToggle }: HeaderProps) {
         onClick={onDarkModeToggle}
         className={cn(
           "p-2 rounded-full transition-colors duration-200",
-          darkMode 
-            ? "bg-gray-700 hover:bg-gray-600 text-yellow-400" 
+          darkMode
+            ? "bg-gray-700 hover:bg-gray-600 text-yellow-400"
             : "bg-white hover:bg-gray-100 text-gray-800"
         )}
       >

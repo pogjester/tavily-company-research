@@ -1,97 +1,192 @@
-import React, { useState } from 'react';
-import { Header } from './components/Header';
-import { ResearchForm } from './components/ResearchForm';
-import { ResearchProcess } from './components/ResearchProcess';
-import { useDarkMode } from './hooks/useDarkMode';
-import { cn } from './lib/utils';
+import { useState } from "react";
+import { ResearchProcess } from "./components/ResearchProcess";
+import { useDarkMode } from "./hooks/useDarkMode";
+import { cn } from "./lib/utils";
+import type { ResearchRequest } from "./lib/types";
 
-interface FormData {
-  companyName: string;
-  website: string;
-  industry: string;
-  headquarters: string;
-}
-
-function App() {
-  const { darkMode, toggleDarkMode } = useDarkMode();
-  const [formData, setFormData] = useState<FormData>({
-    companyName: '',
-    website: '',
-    industry: '',
-    headquarters: ''
-  });
-  const [isProcessing, setIsProcessing] = useState(false);
+export default function App() {
+  const { darkMode } = useDarkMode();
+  const [isProcessActive, setIsProcessActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<ResearchRequest>({
+    company: "",
+    company_url: "",
+    industry: "",
+    hq_location: "",
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessing(true);
-    setCurrentStep(0);
-    
-    try {
-      const response = await fetch('http://localhost:5000/api/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
+    setIsProcessActive(true);
+    setCurrentStep(1);
 
-      const data = await response.json();
-      
-      // Process each step
-      const steps = Object.keys(data.steps);
-      for (let i = 0; i < steps.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Delay for visual effect
-        setCurrentStep(i + 1);
-      }
-    } catch (error) {
-      console.error('Error processing request:', error);
-      // Handle error state
-    }
+    // Simulate research process
+    setTimeout(() => {
+      setCurrentStep(2);
+    }, 5000);
   };
 
   const handleReset = () => {
-    setIsProcessing(false);
+    setIsProcessActive(false);
     setCurrentStep(0);
     setFormData({
-      companyName: '',
-      website: '',
-      industry: '',
-      headquarters: ''
+      company: "",
+      company_url: "",
+      industry: "",
+      hq_location: "",
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleFormChange = (data: Partial<FormData>) => {
-    setFormData(prev => ({ ...prev, ...data }));
   };
 
   return (
-    <div className={cn(
-      "min-h-screen transition-colors duration-200",
-      darkMode 
-        ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white" 
-        : "bg-gradient-to-br from-blue-50 to-indigo-50 text-gray-900"
-    )}>
+    <div
+      className={cn(
+        "min-h-screen w-full transition-colors duration-200",
+        darkMode ? "bg-gray-900" : "bg-gray-50"
+      )}
+    >
       <div className="container mx-auto px-4 py-8">
-        <Header darkMode={darkMode} onDarkModeToggle={toggleDarkMode} />
-        
-        <ResearchForm
-          formData={formData}
-          isProcessing={isProcessing}
-          darkMode={darkMode}
-          onSubmit={handleSubmit}
-          onFormChange={handleFormChange}
-        />
+        <div className="max-w-2xl mx-auto">
+          <h1
+            className={cn(
+              "text-4xl font-bold mb-8 text-center",
+              darkMode ? "text-white" : "text-gray-900"
+            )}
+          >
+            Company Research Assistant
+          </h1>
 
-        <ResearchProcess 
-          isActive={isProcessing} 
-          currentStep={currentStep} 
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label
+                htmlFor="company"
+                className={cn(
+                  "block text-sm font-medium mb-2",
+                  darkMode ? "text-gray-200" : "text-gray-700"
+                )}
+              >
+                Company Name *
+              </label>
+              <input
+                type="text"
+                id="company"
+                value={formData.company}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, company: e.target.value }))
+                }
+                className={cn(
+                  "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                  darkMode
+                    ? "bg-gray-800 border-gray-700 text-white"
+                    : "bg-white border-gray-300 text-gray-900"
+                )}
+                required
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="company_url"
+                className={cn(
+                  "block text-sm font-medium mb-2",
+                  darkMode ? "text-gray-200" : "text-gray-700"
+                )}
+              >
+                Company Website
+              </label>
+              <input
+                type="url"
+                id="company_url"
+                value={formData.company_url}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    company_url: e.target.value,
+                  }))
+                }
+                className={cn(
+                  "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                  darkMode
+                    ? "bg-gray-800 border-gray-700 text-white"
+                    : "bg-white border-gray-300 text-gray-900"
+                )}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="industry"
+                className={cn(
+                  "block text-sm font-medium mb-2",
+                  darkMode ? "text-gray-200" : "text-gray-700"
+                )}
+              >
+                Industry
+              </label>
+              <input
+                type="text"
+                id="industry"
+                value={formData.industry}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, industry: e.target.value }))
+                }
+                className={cn(
+                  "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                  darkMode
+                    ? "bg-gray-800 border-gray-700 text-white"
+                    : "bg-white border-gray-300 text-gray-900"
+                )}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="hq_location"
+                className={cn(
+                  "block text-sm font-medium mb-2",
+                  darkMode ? "text-gray-200" : "text-gray-700"
+                )}
+              >
+                HQ Location
+              </label>
+              <input
+                type="text"
+                id="hq_location"
+                value={formData.hq_location}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    hq_location: e.target.value,
+                  }))
+                }
+                className={cn(
+                  "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                  darkMode
+                    ? "bg-gray-800 border-gray-700 text-white"
+                    : "bg-white border-gray-300 text-gray-900"
+                )}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!formData.company || isProcessActive}
+              className={cn(
+                "w-full py-3 px-4 rounded-lg font-medium transition-colors duration-200",
+                !formData.company || isProcessActive
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : darkMode
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-blue-500 hover:bg-blue-600 text-white"
+              )}
+            >
+              Start Research
+            </button>
+          </form>
+        </div>
+
+        <ResearchProcess
+          isActive={isProcessActive}
+          currentStep={currentStep}
           darkMode={darkMode}
           onReset={handleReset}
         />
@@ -99,5 +194,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
