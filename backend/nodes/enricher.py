@@ -3,7 +3,6 @@ from typing import Dict, List
 import os
 from tavily import AsyncTavilyClient
 import asyncio
-
 from ..classes import ResearchState
 
 class Enricher:

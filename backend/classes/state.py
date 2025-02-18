@@ -1,4 +1,5 @@
 from typing import TypedDict, NotRequired, Required, Dict, List, Any
+from backend.websocket_manager import WebSocketManager
 
 #Define the input state
 class InputState(TypedDict, total=False):
@@ -6,6 +7,8 @@ class InputState(TypedDict, total=False):
     company_url: NotRequired[str]
     hq_location: NotRequired[str]
     industry: NotRequired[str]
+    websocket_manager: NotRequired[WebSocketManager]
+    job_id: NotRequired[str]
 
 class ResearchState(InputState):
     site_scrape: Dict[str, Any]

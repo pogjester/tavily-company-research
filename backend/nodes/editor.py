@@ -22,7 +22,8 @@ class Editor:
             model_name="gpt-4o-mini",
             temperature=0,
             max_tokens=4096,
-            api_key=openai_key
+            api_key=openai_key,
+            streaming=True
         )
 
     async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:

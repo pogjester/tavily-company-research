@@ -4,7 +4,6 @@ from langchain_core.messages import AIMessage
 from ..utils.utils import generate_pdf_from_md
 from ..classes import ResearchState
 import logging
-
 logger = logging.getLogger(__name__)
 
 class OutputNode:

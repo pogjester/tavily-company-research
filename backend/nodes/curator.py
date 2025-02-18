@@ -1,8 +1,7 @@
 from langchain_core.messages import AIMessage
-from typing import Dict, List, Any
+from typing import Dict, Any
 import os
 import cohere
-
 from ..classes import ResearchState
 
 class Curator:
@@ -11,6 +10,7 @@ class Curator:
         if not cohere_key:
             raise ValueError("COHERE_API_KEY environment variable is not set")
         self.co = cohere.Client(cohere_key)
+
 
     def format_document(self, doc: Dict[str, Any]) -> str:
         """Format a document for relevance evaluation."""

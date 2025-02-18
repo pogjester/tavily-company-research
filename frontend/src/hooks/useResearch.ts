@@ -51,59 +51,109 @@ export function useResearch() {
       /^https?:\/\//,
       ""
     )}/research/ws/${jobId}`;
-    console.log("Connecting to WebSocket:", wsUrl);
+    console.log("[WebSocket] Connecting to:", wsUrl);
 
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log("WebSocket connection established");
+      console.log("[WebSocket] Connection established");
+    };
+
+    ws.onclose = (event) => {
+      console.log("[WebSocket] Connection closed", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
+    };
+
+    ws.onerror = (error) => {
+      console.error("[WebSocket] Error occurred:", error);
     };
 
     ws.onmessage = (event) => {
       try {
+        console.log("[WebSocket] Raw message received:", event.data);
         const data = JSON.parse(event.data);
+        console.log("[WebSocket] Parsed message:", data);
 
         if (data.type === "status_update") {
           const update = data.data;
+          console.log("[WebSocket] Processing status update:", update);
 
-          // Update status based on the WebSocket data
-          setStatus((prevStatus) => ({
-            status: update.status,
-            progress: update.progress,
-            debug_info: [
-              ...(prevStatus?.debug_info || []),
-              ...(update.message
-                ? [{ timestamp: data.timestamp, message: update.message }]
-                : []),
-            ],
-            last_update: data.timestamp,
-            result: update.result,
-            error: update.error,
-          }));
+          setStatus((prevStatus) => {
+            const newStatus = {
+              status: update.status,
+              progress: update.progress,
+              debug_info: [
+                ...(prevStatus?.debug_info || []),
+                ...(update.message
+                  ? [{ timestamp: data.timestamp, message: update.message }]
+                  : []),
+              ],
+              last_update: data.timestamp,
+              result: update.result,
+              error: update.error,
+            };
+            console.log("[WebSocket] Updated status:", newStatus);
+            return newStatus;
+          });
 
-          // Update loading state
           setIsLoading(update.status === "processing");
-
-          // Update error state
           setError(update.error || null);
 
-          // Close connection if research is complete or failed
           if (update.status === "completed" || update.status === "failed") {
+            console.log(
+              "[WebSocket] Research completed/failed, closing connection"
+            );
             ws.close();
           }
+        } else if (data.type === "analyst_update") {
+          const update = data.data;
+          console.log("[WebSocket] Processing analyst update:", update);
+
+          setStatus((prevStatus) => {
+            if (!prevStatus) {
+              console.log("[WebSocket] No previous status");
+              return null;
+            }
+
+            const currentResult = prevStatus.result || {
+              results: [],
+              report: "",
+              pdf_url: "",
+              sections_completed: [],
+              total_references: 0,
+              completion_time: new Date().toISOString(),
+              analyst_queries: {
+                "Financial Analyst": [],
+                "Industry Analyst": [],
+                "Company Analyst": [],
+                "News Scanner": [],
+              },
+            };
+
+            const newStatus = {
+              ...prevStatus,
+              result: {
+                ...currentResult,
+                analyst_queries: {
+                  ...currentResult.analyst_queries,
+                  [update.analyst]: update.queries,
+                },
+              },
+            };
+            console.log(
+              "[WebSocket] Updated status with analyst data:",
+              newStatus
+            );
+            return newStatus;
+          });
         }
       } catch (err) {
-        console.error("Error parsing WebSocket data:", err);
+        console.error("[WebSocket] Error processing message:", err);
+        console.error("[WebSocket] Problem message:", event.data);
       }
-    };
-
-    ws.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      setError("Lost connection to research status updates");
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
     };
 
     return () => {

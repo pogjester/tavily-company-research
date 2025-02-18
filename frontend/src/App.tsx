@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ResearchProcess } from "./components/ResearchProcess";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { useResearch } from "./hooks/useResearch";
@@ -16,6 +16,22 @@ export default function App() {
     industry: "",
     hq_location: "",
   });
+  const [messages, setMessages] = useState<string[]>([]);
+
+  useEffect(() => {
+    const socket = new WebSocket("ws://your-websocket-url"); // Replace with your actual websocket URL
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "status_update") {
+        setMessages((prevMessages) => [...prevMessages, data.data.message]);
+      }
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,6 +229,14 @@ export default function App() {
           onReset={handleReset}
           status={status}
         />
+
+        <div className="messages">
+          {messages.map((msg, index) => (
+            <div key={index} className="message">
+              {msg}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

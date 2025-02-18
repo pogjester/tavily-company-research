@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from backend.graph import Graph
 from backend.utils.utils import generate_pdf_from_md
-from backend.websocket_manager import ConnectionManager
+from backend.websocket_manager import WebSocketManager
 from dotenv import load_dotenv
 import logging
 import os
@@ -60,7 +60,7 @@ if not os.path.exists(REPORTS_DIR):
     os.makedirs(REPORTS_DIR)
 
 # Initialize WebSocket manager
-manager = ConnectionManager()
+manager = WebSocketManager()
 
 # Store research results and job status in memory
 research_cache = {}
@@ -69,11 +69,10 @@ job_status = defaultdict(lambda: {
     "result": None,
     "error": None,
     "debug_info": [],
-    "last_update": datetime.now().isoformat(),
-    "progress": 0
+    "last_update": datetime.now().isoformat()
 })
 
-def update_job_status(job_id: str, status: str = None, progress: int = None, message: str = None, error: str = None, result: dict = None):
+def update_job_status(job_id: str, status: str = None, message: str = None, error: str = None, result: dict = None):
     """Update job status with debug information."""
     job = job_status[job_id]
     
@@ -85,8 +84,6 @@ def update_job_status(job_id: str, status: str = None, progress: int = None, mes
     
     if status:
         job["status"] = status
-    if progress is not None:
-        job["progress"] = progress
     if error:
         job["error"] = error
     if result:
@@ -103,20 +100,21 @@ class ResearchRequest(BaseModel):
 async def process_research(job_id: str, data: ResearchRequest):
     """Background task to process research request."""
     try:
-        update_job_status(job_id, status="processing", progress=0, message=f"Starting research for {data.company}")
+        # Wait a short time for WebSocket connection to be established
+        await asyncio.sleep(1)
+        
+        update_job_status(job_id, status="processing", message=f"Starting research for {data.company}")
         await manager.send_status_update(
             job_id,
             status="processing",
-            progress=0,
             message=f"Starting research for {data.company}"
         )
         
         # Initialize research graph
-        update_job_status(job_id, progress=5, message="Initializing research graph")
+        update_job_status(job_id, message="Initializing research graph")
         await manager.send_status_update(
             job_id,
             status="processing",
-            progress=5,
             message="Initializing research graph"
         )
         
@@ -124,21 +122,21 @@ async def process_research(job_id: str, data: ResearchRequest):
             company=data.company,
             url=data.company_url,
             industry=data.industry,
-            hq_location=data.hq_location
+            hq_location=data.hq_location,
+            websocket_manager=manager,
+            job_id=job_id
         )
 
         # Run research pipeline
         results = []
         state = {}
-        update_job_status(job_id, progress=10, message="Starting research pipeline")
+        update_job_status(job_id, message="Starting research pipeline")
         await manager.send_status_update(
             job_id,
             status="processing",
-            progress=10,
             message="Starting research pipeline"
         )
         
-        progress = 10
         analyst_queries = {
             "Financial Analyst": [],
             "Industry Analyst": [],
@@ -146,58 +144,37 @@ async def process_research(job_id: str, data: ResearchRequest):
             "News Scanner": []
         }
 
-        async for s in graph.run({}, {}):
+        async for s in graph.run(thread={}):
             state.update(s)
+            logger.info(f"Received state update for job {job_id}. Keys: {s.keys()}")
             
-            # Update progress based on state changes
             if messages := state.get('messages', []):
                 latest_message = messages[-1].content
                 results.append(latest_message)
 
-                # Extract queries if present in the message
-                if "Used queries:" in latest_message:
-                    for analyst in analyst_queries.keys():
-                        if analyst in latest_message:
-                            queries_start = latest_message.index("Used queries:") + len("Used queries:")
-                            queries = [
-                                q.strip() 
-                                for q in latest_message[queries_start:].strip().split("•") 
-                                if q.strip()
-                            ]
-                            analyst_queries[analyst] = queries
-                            # Send analyst-specific update
-                            await manager.send_analyst_update(job_id, analyst, queries)
-
-                progress = min(progress + 10, 90)
-                update_job_status(job_id, progress=progress, message=latest_message)
-                await manager.send_status_update(
-                    job_id,
-                    status="processing",
-                    progress=progress,
-                    message=latest_message
-                )
+                update_job_status(job_id, message=latest_message)
+                
+            # Update analyst queries from state
+            if "analyst_type" in s and "queries" in s:
+                analyst_queries[s["analyst_type"]] = s["queries"]
             
             # Log specific state updates
             if briefings := state.get('briefings'):
                 sections = list(briefings.keys())
-                progress = min(progress + 5, 90)
                 update_job_status(
                     job_id, 
-                    progress=progress,
                     message=f"Completed briefings for sections: {', '.join(sections)}"
                 )
                 await manager.send_status_update(
                     job_id,
                     status="processing",
-                    progress=progress,
                     message=f"Completed briefings for sections: {', '.join(sections)}"
                 )
 
-        update_job_status(job_id, progress=95, message="Research pipeline completed, generating report")
+        update_job_status(job_id, message="Research pipeline completed, generating report")
         await manager.send_status_update(
             job_id,
             status="processing",
-            progress=95,
             message="Research pipeline completed, generating report"
         )
 
@@ -208,11 +185,10 @@ async def process_research(job_id: str, data: ResearchRequest):
             raise Exception("No report content generated")
 
         # Generate PDF
-        update_job_status(job_id, progress=98, message="Generating PDF report")
+        update_job_status(job_id, message="Generating PDF report")
         await manager.send_status_update(
             job_id,
             status="processing",
-            progress=98,
             message="Generating PDF report"
         )
         
@@ -246,14 +222,12 @@ async def process_research(job_id: str, data: ResearchRequest):
         update_job_status(
             job_id,
             status="completed",
-            progress=100,
             message="Research completed successfully",
             result=final_result
         )
         await manager.send_status_update(
             job_id,
             status="completed",
-            progress=100,
             message="Research completed successfully",
             result=final_result
         )
@@ -263,14 +237,12 @@ async def process_research(job_id: str, data: ResearchRequest):
         update_job_status(
             job_id,
             status="failed",
-            progress=0,
             message=f"Error during research: {str(e)}",
             error=str(e)
         )
         await manager.send_status_update(
             job_id,
             status="failed",
-            progress=0,
             message=f"Error during research: {str(e)}",
             error=str(e)
         )
@@ -336,7 +308,6 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
             await manager.send_status_update(
                 job_id,
                 status=status["status"],
-                progress=status["progress"],
                 message="Connected to status stream",
                 error=status["error"],
                 result=status["result"]

@@ -1,8 +1,9 @@
 import os
 import asyncio
 from datetime import datetime
-from langchain_openai import ChatOpenAI
+from openai import AsyncOpenAI
 from tavily import AsyncTavilyClient
+from typing import Dict, Any, List
 
 def convert_keys_to_str(data):
     if isinstance(data, dict):
@@ -16,94 +17,125 @@ class BaseResearcher:
     def __init__(self):
         tavily_key = os.getenv("TAVILY_API_KEY")
         openai_key = os.getenv("OPENAI_API_KEY")
+        
         if not tavily_key or not openai_key:
             raise ValueError("Missing API keys")
+            
         self.tavily_client = AsyncTavilyClient(api_key=tavily_key)
-        self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
-            temperature=0,
-            max_tokens=4096,
-            api_key=openai_key
-        )
+        self.openai_client = AsyncOpenAI(api_key=openai_key)
 
-    async def generate_queries(self, state, prompt):
+    async def generate_queries(self, state: Dict, prompt: str) -> List[str]:
         company = state.get("company", "Unknown Company")
         current_year = datetime.now().year
         
-        messages = [
-            {
-                "role": "user",
-                "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
-{prompt}
-
-Important Guidelines:
-- Focus ONLY on company-specific information
-- DO NOT include general economic trends, GDP, or macro-economic factors
-- Each query must be about {company} specifically
-- Include the year {current_year} in each query
-- Make queries precise and targeted to the company
-
-Provide exactly 4 search queries (one per line).
-Do not number the queries or add any extra text - just output exactly 4 lines."""
-            }
-        ]
-        
         try:
-            response = await self.llm.ainvoke(messages)
-            # Extract content from OpenAI response and split into lines
-            queries = [q.strip() for q in response.content.splitlines() if q.strip()]
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
+{self._format_query_prompt(prompt, company, current_year)}"""
+                }],
+                temperature=0,
+                max_tokens=4096,
+                stream=True
+            )
             
-            # Validate we got exactly 4 queries, otherwise use defaults
-            if len(queries) == 4:
-                return queries
-                
+            queries = [
+                q.strip() 
+                for q in response.choices[0].message.content.splitlines() 
+                if q.strip()
+            ]
+            
+            await self._send_update(
+                f"Generated {len(queries)} queries",
+                "query_generation_complete",
+                {"queries": queries}
+            )
+            
+            return queries[:4]  # Ensure max 4 queries
+            
         except Exception as e:
-            print(f"Error generating queries: {e}")
-            
-        # Fallback queries if we didn't get exactly 4 valid queries
+            return self._fallback_queries(company, current_year)
+
+    def _format_query_prompt(self, prompt, company, year):
+        return f"""{prompt}
+
+        Important Guidelines:
+        - Focus ONLY on {company}-specific information
+        - Include the year {year} in each query
+        - Make queries precise and targeted
+        - Provide exactly 4 search queries (one per line)"""
+
+    def _fallback_queries(self, company, year):
         return [
-            f"{company} overview {current_year}",
-            f"{company} recent news {current_year}",
-            f"{company} {prompt.split()[0]} {current_year}",
-            f"{company} industry analysis {current_year}"
+            f"{company} overview {year}",
+            f"{company} recent news {year}",
+            f"{company} financial reports {year}",
+            f"{company} industry analysis {year}"
         ]
 
-    async def search_single_query(self, query, search_depth="advanced"):
+    async def search_single_query(self, query: str) -> Dict[str, Any]:
         if not query or len(query.split()) < 3:
-            return {}  # Return empty dict instead of empty list for invalid queries
-        results = await self.tavily_client.search(
-            query,
-            search_depth=search_depth,
-            include_raw_content=False,
-            max_results=5
-        )
-        docs = {}  # Changed from list to dictionary
-        for result in results.get("results", []):
-            if not result.get("content") or not result.get("url"):
-                continue
-            url = result.get("url")
-            docs[url] = {  # Use URL as key
-                "title": result.get("title", ""),
-                "content": result.get("content", ""),
-                "query": query,
-                "url": url,
-                "source": "web_search",
-                "score": result.get("score", 0.0)
-            }
-        return docs
+            return {}
 
-    async def search_documents(self, queries, search_depth="advanced"):
-        tasks = [
-            self.search_single_query(q, search_depth)
-            for q in queries if isinstance(q, str) and len(q.split()) >= 3
-        ]
+        await self._send_update(
+            "Starting web search",
+            "search_start",
+            {"query": query}
+        )
+
+        try:
+            results = await self.tavily_client.search(
+                query,
+                search_depth="advanced",
+                include_raw_content=False,
+                max_results=5
+            )
+            
+            docs = {}
+            for result in results.get("results", []):
+                if not result.get("content") or not result.get("url"):
+                    continue
+                    
+                url = result.get("url")
+                docs[url] = {
+                    "title": result.get("title", ""),
+                    "content": result.get("content", ""),
+                    "query": query,
+                    "url": url,
+                    "source": "web_search",
+                    "score": result.get("score", 0.0)
+                }
+
+            await self._send_update(
+                f"Found {len(docs)} documents",
+                "search_complete",
+                {"query": query, "count": len(docs)}
+            )
+            
+            return docs
+            
+        except Exception as e:
+            await self._send_update(
+                "Search failed",
+                "search_error",
+                {"query": query, "error": str(e)}
+            )
+            return {}
+
+    async def search_documents(self, queries: List[str]) -> Dict[str, Any]:
+        valid_queries = [q for q in queries if isinstance(q, str) and len(q.split()) >= 3]
+
+        tasks = [self.search_single_query(q) for q in valid_queries]
         results = await asyncio.gather(*tasks)
-        # Merge all dictionaries into one
+        
         merged_docs = {}
         for result_dict in results:
             merged_docs.update(result_dict)
+
         return merged_docs
 
     async def analyze(self, state):
-        # Convert all keys in state to strings recursively
-        return convert_keys_to_str(state)
+        analyzed = convert_keys_to_str(state)
+        return analyzed

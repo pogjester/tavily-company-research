@@ -7,6 +7,7 @@ from .base import BaseResearcher
 class CompanyAnalyzer(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
+        self.analyst_type = "company_analyst"  # Add this if not present
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')

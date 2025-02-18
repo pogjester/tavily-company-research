@@ -3,7 +3,6 @@ from langchain_openai import ChatOpenAI
 from typing import Dict, Any, Union, List
 import os
 import logging
-
 from ..classes import ResearchState
 
 logger = logging.getLogger(__name__)
