@@ -24,13 +24,34 @@ load_dotenv()
 # Initialize FastAPI application
 app = FastAPI(title="Tavily Company Research API")
 
+@app.on_event("startup")
+async def startup_event():
+    """Runs when the application starts."""
+    logger.info("Starting up Tavily Company Research API")
+    # Create reports directory if it doesn't exist
+    if not os.path.exists(REPORTS_DIR):
+        os.makedirs(REPORTS_DIR)
+        logger.info(f"Created reports directory at {REPORTS_DIR}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Runs when the application is shutting down."""
+    logger.info("Shutting down Tavily Company Research API")
+    # Clean up any active WebSocket connections
+    for job_connections in manager.active_connections.values():
+        for connection in job_connections:
+            try:
+                await connection.close()
+            except:
+                pass
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 # Create reports directory if it doesn't exist
@@ -52,6 +73,27 @@ job_status = defaultdict(lambda: {
     "progress": 0
 })
 
+def update_job_status(job_id: str, status: str = None, progress: int = None, message: str = None, error: str = None, result: dict = None):
+    """Update job status with debug information."""
+    job = job_status[job_id]
+    
+    if message:
+        job["debug_info"].append({
+            "timestamp": datetime.now().isoformat(),
+            "message": message
+        })
+    
+    if status:
+        job["status"] = status
+    if progress is not None:
+        job["progress"] = progress
+    if error:
+        job["error"] = error
+    if result:
+        job["result"] = result
+        
+    job["last_update"] = datetime.now().isoformat()
+
 class ResearchRequest(BaseModel):
     company: str
     company_url: str | None = None
@@ -61,6 +103,7 @@ class ResearchRequest(BaseModel):
 async def process_research(job_id: str, data: ResearchRequest):
     """Background task to process research request."""
     try:
+        update_job_status(job_id, status="processing", progress=0, message=f"Starting research for {data.company}")
         await manager.send_status_update(
             job_id,
             status="processing",
@@ -69,6 +112,7 @@ async def process_research(job_id: str, data: ResearchRequest):
         )
         
         # Initialize research graph
+        update_job_status(job_id, progress=5, message="Initializing research graph")
         await manager.send_status_update(
             job_id,
             status="processing",
@@ -86,6 +130,7 @@ async def process_research(job_id: str, data: ResearchRequest):
         # Run research pipeline
         results = []
         state = {}
+        update_job_status(job_id, progress=10, message="Starting research pipeline")
         await manager.send_status_update(
             job_id,
             status="processing",
@@ -124,6 +169,7 @@ async def process_research(job_id: str, data: ResearchRequest):
                             await manager.send_analyst_update(job_id, analyst, queries)
 
                 progress = min(progress + 10, 90)
+                update_job_status(job_id, progress=progress, message=latest_message)
                 await manager.send_status_update(
                     job_id,
                     status="processing",
@@ -135,6 +181,11 @@ async def process_research(job_id: str, data: ResearchRequest):
             if briefings := state.get('briefings'):
                 sections = list(briefings.keys())
                 progress = min(progress + 5, 90)
+                update_job_status(
+                    job_id, 
+                    progress=progress,
+                    message=f"Completed briefings for sections: {', '.join(sections)}"
+                )
                 await manager.send_status_update(
                     job_id,
                     status="processing",
@@ -142,6 +193,7 @@ async def process_research(job_id: str, data: ResearchRequest):
                     message=f"Completed briefings for sections: {', '.join(sections)}"
                 )
 
+        update_job_status(job_id, progress=95, message="Research pipeline completed, generating report")
         await manager.send_status_update(
             job_id,
             status="processing",
@@ -156,6 +208,7 @@ async def process_research(job_id: str, data: ResearchRequest):
             raise Exception("No report content generated")
 
         # Generate PDF
+        update_job_status(job_id, progress=98, message="Generating PDF report")
         await manager.send_status_update(
             job_id,
             status="processing",
@@ -178,25 +231,42 @@ async def process_research(job_id: str, data: ResearchRequest):
             'pdf_path': pdf_path
         }
         
+        # Prepare final result
+        final_result = {
+            "results": results,
+            "report": report_content,
+            "pdf_url": f"/research/pdf/{pdf_filename}",
+            "sections_completed": list(state.get('briefings', {}).keys()),
+            "total_references": len(state.get('references', [])),
+            "completion_time": datetime.now().isoformat(),
+            "analyst_queries": analyst_queries
+        }
+        
         # Send final success update
+        update_job_status(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Research completed successfully",
+            result=final_result
+        )
         await manager.send_status_update(
             job_id,
             status="completed",
             progress=100,
             message="Research completed successfully",
-            result={
-                "results": results,
-                "report": report_content,
-                "pdf_url": f"/research/pdf/{pdf_filename}",
-                "sections_completed": list(state.get('briefings', {}).keys()),
-                "total_references": len(state.get('references', [])),
-                "completion_time": datetime.now().isoformat(),
-                "analyst_queries": analyst_queries
-            }
+            result=final_result
         )
         
     except Exception as e:
         logger.error(f"Error processing job {job_id}: {str(e)}", exc_info=True)
+        update_job_status(
+            job_id,
+            status="failed",
+            progress=0,
+            message=f"Error during research: {str(e)}",
+            error=str(e)
+        )
         await manager.send_status_update(
             job_id,
             status="failed",
@@ -254,6 +324,10 @@ async def get_pdf(filename: str):
 async def websocket_endpoint(websocket: WebSocket, job_id: str):
     """WebSocket endpoint for research status updates."""
     try:
+        # Log connection attempt
+        logger.info(f"WebSocket connection attempt for job {job_id}")
+        
+        await websocket.accept()
         await manager.connect(websocket, job_id)
         
         # Send initial state if job exists
@@ -273,14 +347,22 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
             try:
                 # Wait for client messages (if any)
                 data = await websocket.receive_text()
+                logger.info(f"Received message from client: {data}")
                 # You can handle client messages here if needed
             except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for job {job_id}")
                 manager.disconnect(websocket, job_id)
                 break
                 
     except Exception as e:
-        logger.error(f"WebSocket error: {str(e)}", exc_info=True)
+        logger.error(f"WebSocket error for job {job_id}: {str(e)}", exc_info=True)
         manager.disconnect(websocket, job_id)
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='0.0.0.0', port=8000) 
+    uvicorn.run(
+        "application:app",
+        host='0.0.0.0',
+        port=8000,
+        reload=True,
+        ws='websockets'
+    ) 

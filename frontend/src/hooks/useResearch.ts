@@ -41,56 +41,75 @@ export function useResearch() {
     }
   };
 
-  // Set up SSE connection when jobId changes
+  // Set up WebSocket connection when jobId changes
   useEffect(() => {
     if (!jobId) return;
 
-    const eventSource = new EventSource(
-      `${API_BASE_URL}/research/stream/${jobId}`
-    );
+    // Convert http(s) to ws(s) and construct WebSocket URL
+    const wsProtocol = API_BASE_URL.startsWith("https") ? "wss" : "ws";
+    const wsUrl = `${wsProtocol}://${API_BASE_URL.replace(
+      /^https?:\/\//,
+      ""
+    )}/research/ws/${jobId}`;
+    console.log("Connecting to WebSocket:", wsUrl);
 
-    eventSource.onmessage = (event) => {
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established");
+    };
+
+    ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
 
-        // Update status based on the SSE data
-        setStatus((prevStatus) => ({
-          status: data.status,
-          progress: data.progress,
-          debug_info: [
-            ...(prevStatus?.debug_info || []),
-            ...(data.message
-              ? [{ timestamp: data.timestamp, message: data.message }]
-              : []),
-          ],
-          last_update: data.timestamp,
-          result: data.result,
-          error: data.error,
-        }));
+        if (data.type === "status_update") {
+          const update = data.data;
 
-        // Update loading state
-        setIsLoading(data.status === "processing");
+          // Update status based on the WebSocket data
+          setStatus((prevStatus) => ({
+            status: update.status,
+            progress: update.progress,
+            debug_info: [
+              ...(prevStatus?.debug_info || []),
+              ...(update.message
+                ? [{ timestamp: data.timestamp, message: update.message }]
+                : []),
+            ],
+            last_update: data.timestamp,
+            result: update.result,
+            error: update.error,
+          }));
 
-        // Update error state
-        setError(data.error || null);
+          // Update loading state
+          setIsLoading(update.status === "processing");
 
-        // Close connection if research is complete or failed
-        if (data.status === "completed" || data.status === "failed") {
-          eventSource.close();
+          // Update error state
+          setError(update.error || null);
+
+          // Close connection if research is complete or failed
+          if (update.status === "completed" || update.status === "failed") {
+            ws.close();
+          }
         }
       } catch (err) {
-        console.error("Error parsing SSE data:", err);
+        console.error("Error parsing WebSocket data:", err);
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.error("SSE connection error:", err);
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
       setError("Lost connection to research status updates");
-      eventSource.close();
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
     };
 
     return () => {
-      eventSource.close();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     };
   }, [jobId]);
 
