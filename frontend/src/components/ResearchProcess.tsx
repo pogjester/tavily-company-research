@@ -33,8 +33,18 @@ export function ResearchProcess({
 
   // Helper function to extract queries for each analyst
   const getQueriesForAnalyst = (analyst: string) => {
-    if (!status?.debug_info) return [];
+    if (!status) return [];
 
+    // If we have completed research, use the structured queries
+    if (status.status === "completed" && status.result?.analyst_queries) {
+      return (
+        status.result.analyst_queries[
+          analyst as keyof typeof status.result.analyst_queries
+        ] || []
+      );
+    }
+
+    // Otherwise, extract from debug messages for real-time updates
     return status.debug_info
       .filter((info) => info.message.includes(analyst))
       .map((info) => {
@@ -57,13 +67,7 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-blue-600/40" : "from-blue-500/40",
       gradientTo: darkMode ? "to-blue-500/20" : "to-blue-400/20",
       borderColor: darkMode ? "border-blue-400/20" : "border-blue-300/30",
-      queries: status
-        ? getQueriesForAnalyst("Financial Analyst")
-        : [
-            "Financial performance metrics",
-            "Revenue growth analysis",
-            "Market capitalization trends",
-          ],
+      queries: getQueriesForAnalyst("Financial Analyst"),
     },
     {
       name: "Industry Analyst",
@@ -71,13 +75,7 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-green-600/40" : "from-green-500/40",
       gradientTo: darkMode ? "to-green-500/20" : "to-green-400/20",
       borderColor: darkMode ? "border-green-400/20" : "border-green-300/30",
-      queries: status
-        ? getQueriesForAnalyst("Industry Analyst")
-        : [
-            "Market position assessment",
-            "Competitive landscape analysis",
-            "Industry growth projections",
-          ],
+      queries: getQueriesForAnalyst("Industry Analyst"),
     },
     {
       name: "Company Analyst",
@@ -85,13 +83,7 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-purple-600/40" : "from-purple-500/40",
       gradientTo: darkMode ? "to-purple-500/20" : "to-purple-400/20",
       borderColor: darkMode ? "border-purple-400/20" : "border-purple-300/30",
-      queries: status
-        ? getQueriesForAnalyst("Company Analyst")
-        : [
-            "Corporate structure review",
-            "Business model analysis",
-            "Strategic initiatives",
-          ],
+      queries: getQueriesForAnalyst("Company Analyst"),
     },
     {
       name: "News Scanner",
@@ -99,13 +91,7 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-orange-600/40" : "from-orange-500/40",
       gradientTo: darkMode ? "to-orange-500/20" : "to-orange-400/20",
       borderColor: darkMode ? "border-orange-400/20" : "border-orange-300/30",
-      queries: status
-        ? getQueriesForAnalyst("News Scanner")
-        : [
-            "Recent press releases",
-            "Media sentiment analysis",
-            "Market news impact",
-          ],
+      queries: getQueriesForAnalyst("News Scanner"),
     },
   ];
 
@@ -520,6 +506,33 @@ export function ResearchProcess({
                 </button>
               </div>
             </div>
+
+            {/* Error State */}
+            {status?.status === "failed" && status.error && (
+              <div
+                className={cn(
+                  "mt-4 p-4 rounded",
+                  darkMode
+                    ? "bg-red-900/50 text-red-200"
+                    : "bg-red-50 text-red-700"
+                )}
+              >
+                <h3 className="font-medium mb-2">Error Occurred</h3>
+                <p>{status.error}</p>
+                <button
+                  onClick={onReset}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-md transition-colors mt-4",
+                    darkMode
+                      ? "bg-red-800/50 hover:bg-red-700/50 text-white"
+                      : "bg-red-100/50 hover:bg-red-200/50 text-red-800"
+                  )}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

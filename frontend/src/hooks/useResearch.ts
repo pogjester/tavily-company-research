@@ -41,51 +41,58 @@ export function useResearch() {
     }
   };
 
-  // Poll status
-  const pollStatus = useCallback(async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/research/status/${id}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch status");
-      }
-      const result: ResearchStatus = await response.json();
-      setStatus(result);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      throw err;
-    }
-  }, []);
-
-  // Auto-polling effect
+  // Set up SSE connection when jobId changes
   useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval>;
+    if (!jobId) return;
 
-    if (jobId) {
-      // Initial poll
-      pollStatus(jobId);
+    const eventSource = new EventSource(
+      `${API_BASE_URL}/research/stream/${jobId}`
+    );
 
-      // Set up polling interval
-      intervalId = setInterval(async () => {
-        try {
-          const result = await pollStatus(jobId);
-          // Stop polling if research is complete or failed
-          if (result.status === "completed" || result.status === "failed") {
-            clearInterval(intervalId);
-          }
-        } catch (err) {
-          clearInterval(intervalId);
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        // Update status based on the SSE data
+        setStatus((prevStatus) => ({
+          status: data.status,
+          progress: data.progress,
+          debug_info: [
+            ...(prevStatus?.debug_info || []),
+            ...(data.message
+              ? [{ timestamp: data.timestamp, message: data.message }]
+              : []),
+          ],
+          last_update: data.timestamp,
+          result: data.result,
+          error: data.error,
+        }));
+
+        // Update loading state
+        setIsLoading(data.status === "processing");
+
+        // Update error state
+        setError(data.error || null);
+
+        // Close connection if research is complete or failed
+        if (data.status === "completed" || data.status === "failed") {
+          eventSource.close();
         }
-      }, 2000); // Poll every 2 seconds
-    }
-
-    // Cleanup
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+      } catch (err) {
+        console.error("Error parsing SSE data:", err);
       }
     };
-  }, [jobId, pollStatus]);
+
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error:", err);
+      setError("Lost connection to research status updates");
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [jobId]);
 
   // Download PDF
   const downloadPdf = async (pdfUrl: string) => {

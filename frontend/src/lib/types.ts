@@ -28,6 +28,12 @@ export interface ResearchResult {
   sections_completed: string[];
   total_references: number;
   completion_time: string;
+  analyst_queries: {
+    "Financial Analyst": string[];
+    "Industry Analyst": string[];
+    "Company Analyst": string[];
+    "News Scanner": string[];
+  };
 }
 
 // Status response from /research/status/<job_id> endpoint
