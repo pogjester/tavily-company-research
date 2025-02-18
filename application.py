@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 import logging
 import os
 from datetime import datetime
+import asyncio
+import uuid
+from collections import defaultdict
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -22,9 +25,127 @@ REPORTS_DIR = "reports"
 if not os.path.exists(REPORTS_DIR):
     os.makedirs(REPORTS_DIR)
 
-# Store research results in memory (for demo purposes)
-# In production, you would use a proper database
+# Store research results and job status in memory
 research_cache = {}
+job_status = defaultdict(lambda: {
+    "status": "pending",
+    "result": None,
+    "error": None,
+    "debug_info": [],
+    "last_update": datetime.now().isoformat(),
+    "progress": 0
+})
+
+def update_job_status(job_id, message, status=None, error=None, result=None, progress=None):
+    """Update job status with debug information."""
+    job = job_status[job_id]
+    job["debug_info"].append({
+        "timestamp": datetime.now().isoformat(),
+        "message": message
+    })
+    job["last_update"] = datetime.now().isoformat()
+    
+    if status:
+        job["status"] = status
+    if error:
+        job["error"] = error
+    if result:
+        job["result"] = result
+    if progress is not None:
+        job["progress"] = progress
+
+async def process_research(job_id, data):
+    """Background task to process research request."""
+    try:
+        update_job_status(job_id, f"Starting research for {data.get('company')}", status="processing", progress=0)
+        
+        # Initialize research graph
+        update_job_status(job_id, "Initializing research graph", progress=5)
+        graph = Graph(
+            company=data.get('company'),
+            url=data.get('company_url'),
+            industry=data.get('industry'),
+            hq_location=data.get('hq_location')
+        )
+
+        # Run research pipeline
+        results = []
+        state = {}
+        update_job_status(job_id, "Starting research pipeline", progress=10)
+        
+        progress = 10
+        async for s in graph.run({}, {}):
+            state.update(s)
+            
+            # Update progress based on state changes
+            if messages := state.get('messages', []):
+                latest_message = messages[-1].content
+                results.append(latest_message)
+                update_job_status(
+                    job_id, 
+                    f"Research update: {latest_message[:100]}...",
+                    progress=min(progress + 10, 90)
+                )
+                progress = min(progress + 10, 90)
+            
+            # Log specific state updates
+            if briefings := state.get('briefings'):
+                sections = list(briefings.keys())
+                update_job_status(
+                    job_id,
+                    f"Completed briefings for sections: {', '.join(sections)}",
+                    progress=min(progress + 5, 90)
+                )
+
+        update_job_status(job_id, "Research pipeline completed, generating report", progress=95)
+
+        # Get the report content
+        report_content = state.get('output', {}).get('report', '')
+        
+        if not report_content or not report_content.strip():
+            raise Exception("No report content generated")
+
+        # Generate PDF
+        update_job_status(job_id, "Generating PDF report", progress=98)
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        pdf_filename = f"{data['company'].replace(' ', '_')}_{timestamp}.pdf"
+        pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
+        
+        generate_pdf_from_md(report_content, pdf_path)
+        
+        # Store results
+        research_cache[data['company']] = {
+            'results': results,
+            'report': report_content,
+            'briefings': state.get('briefings', {}),
+            'references': state.get('references', {}),
+            'pdf_path': pdf_path
+        }
+        
+        # Update final job status
+        update_job_status(
+            job_id,
+            "Research completed successfully",
+            status="completed",
+            progress=100,
+            result={
+                "results": results,
+                "report": report_content,
+                "pdf_url": f"/research/pdf/{pdf_filename}",
+                "sections_completed": list(state.get('briefings', {}).keys()),
+                "total_references": len(state.get('references', [])),
+                "completion_time": datetime.now().isoformat()
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing job {job_id}: {str(e)}", exc_info=True)
+        update_job_status(
+            job_id,
+            f"Error during research: {str(e)}",
+            status="failed",
+            error=str(e)
+        )
 
 @app.route('/health', methods=['GET'])
 async def health_check():
@@ -38,161 +159,47 @@ async def root():
 
 @app.route('/research', methods=['POST'])
 async def research():
-    """Main research endpoint."""
+    """Main research endpoint that returns a job ID."""
     try:
         logger.info("Received research request")
         data = request.json
         logger.info(f"Request data: {data}")
         
         if not data or 'company' not in data:
-            logger.error("Missing company name in request")
             return jsonify({"error": "Missing company name"}), 400
 
-        # Initialize research graph
-        logger.info(f"Initializing research graph for {data.get('company')}")
-        graph = Graph(
-            company=data.get('company'),
-            url=data.get('company_url'),
-            industry=data.get('industry'),
-            hq_location=data.get('hq_location')
-        )
-
-        # Run research pipeline
-        logger.info("Starting research pipeline")
-        results = []
-        state = {}  # Track complete state
-        async for s in graph.run({}, {}):
-            # Merge new state updates into complete state
-            state.update(s)
-            logger.info(f"Received state update with keys: {list(s.keys())}")
-            logger.debug(f"Complete state now contains keys: {list(state.keys())}")
-            
-            # Log briefings if they exist
-            if briefings := state.get('briefings'):
-                logger.info(f"Found briefings for sections: {list(briefings.keys())}")
-                for section, content in briefings.items():
-                    logger.info(f"{section} briefing length: {len(content)} characters")
-            
-            # Log report if it exists
-            if report := state.get('report'):
-                logger.info(f"Found report with length: {len(report)} characters")
-            
-            if messages := state.get('messages', []):
-                results.append(messages[-1].content)
-                logger.info(f"Added message: {messages[-1].content}")
-
-        if not state:
-            logger.error("No state received from pipeline")
-            return jsonify({"error": "Research pipeline failed"}), 500
-            
-        logger.info(f"Pipeline completed. Final state contains keys: {list(state.get('output').keys())}")
+        # Generate a job ID
+        job_id = str(uuid.uuid4())
         
-        # Get the report content
-        report_content = state.get('output', {}).get('report', '')
+        # Start background task
+        asyncio.create_task(process_research(job_id, data))
         
-        # Debug check for report content
-        print("\n\n")
-        print("="*100)
-        print(f"📊 COMPLETE RESEARCH REPORT FOR {data['company'].upper()}")
-        print("="*100)
-        print("\n")
-        
-        if not report_content or not report_content.strip():
-            logger.error("❌ Report content is empty or whitespace only!")
-            logger.error(f"Final state keys available: {list(state.keys())}")
-            logger.error("Checking briefings in final state...")
-            if briefings := state.get('briefings', {}):
-                logger.error(f"Found briefings for sections: {list(briefings.keys())}")
-                for section, content in briefings.items():
-                    logger.error(f"{section} briefing length: {len(content)} characters")
-            else:
-                logger.error("No briefings found in final state")
-            return jsonify({"error": "No report content generated"}), 500
-            
-        print(report_content)
-        print("\n")
-        print("="*100)
-        print("END OF REPORT")
-        print("="*100)
-        print("\n\n")
-        
-        # Also log individual sections for debugging
-        logger.info("\nDETAILED SECTION BREAKDOWN:")
-        sections_found = []
-        for section in ['Company Overview', 'Industry Analysis', 'Financial Analysis', 'Recent Developments', 'References']:
-            start_idx = report_content.find(section)
-            if start_idx != -1:
-                sections_found.append(section)
-                next_section_idx = float('inf')
-                for next_section in ['Company Overview', 'Industry Analysis', 'Financial Analysis', 'Recent Developments', 'References']:
-                    if next_section != section:
-                        idx = report_content.find(next_section, start_idx + len(section))
-                        if idx != -1 and idx < next_section_idx:
-                            next_section_idx = idx
-                
-                section_content = report_content[start_idx:next_section_idx if next_section_idx != float('inf') else None]
-                logger.info("\n" + "-"*50)
-                logger.info(f"SECTION: {section}")
-                logger.info("-"*50)
-                logger.info(section_content.strip())
-        
-        logger.info("\nSections found in report: " + ", ".join(sections_found))
-        logger.info(f"Total report length: {len(report_content)} characters")
-
-        # Generate PDF from the report
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        pdf_filename = f"{data['company'].replace(' ', '_')}_{timestamp}.pdf"
-        pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
-        
-        try:
-            # Debug log the content being sent to PDF generator
-            logger.info(f"Generating PDF with content length: {len(report_content)} characters")
-            logger.info("Final Report:")
-            logger.info("-" * 50)
-            logger.info(report_content)
-            logger.info("-" * 50)
-            
-            generate_pdf_from_md(report_content, pdf_path)
-            logger.info(f"Generated PDF report at {pdf_path}")
-            
-            # Verify PDF was created and has content
-            if os.path.exists(pdf_path):
-                pdf_size = os.path.getsize(pdf_path)
-                logger.info(f"PDF file size: {pdf_size} bytes")
-                if pdf_size == 0:
-                    logger.error("PDF file was created but is empty")
-            else:
-                logger.error("PDF file was not created")
-        except Exception as e:
-            logger.error(f"Error generating PDF: {str(e)}", exc_info=True)
-            # Continue without PDF if generation fails
-            pdf_path = None
-
-        # Store research results in cache
-        research_cache[data['company']] = {
-            'results': results,
-            'report': report_content,
-            'briefings': state.get('briefings', {}),
-            'references': state.get('references', {}),
-            'pdf_path': pdf_path
-        }
-
-        response_data = {
-            "status": "success",
-            "results": results,
-            "report": report_content
-        }
-
-        # Add PDF download URL if available
-        if pdf_path:
-            response_data["pdf_url"] = f"/research/pdf/{pdf_filename}"
-
-        logger.info("Research pipeline completed")
-        return jsonify(response_data)
+        return jsonify({
+            "status": "accepted",
+            "job_id": job_id,
+            "message": "Research started. Use /research/status/<job_id> to check status.",
+            "polling_url": f"/research/status/{job_id}"
+        })
 
     except Exception as e:
-        logger.error(f"Error during research: {str(e)}", exc_info=True)
+        logger.error(f"Error initiating research: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+@app.route('/research/status/<job_id>', methods=['GET'])
+async def check_status(job_id):
+    """Check the status of a research job."""
+    if job_id not in job_status:
+        return jsonify({"error": "Job not found"}), 404
+        
+    status = job_status[job_id]
+    return jsonify({
+        "status": status["status"],
+        "progress": status["progress"],
+        "debug_info": status["debug_info"],
+        "last_update": status["last_update"],
+        "result": status["result"] if status["status"] == "completed" else None,
+        "error": status["error"] if status["status"] == "failed" else None
+    })
 
 @app.route('/research/pdf/<filename>', methods=['GET'])
 async def get_pdf(filename):

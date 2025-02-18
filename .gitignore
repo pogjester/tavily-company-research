@@ -14,6 +14,9 @@ __pycache__/
 .vscode/
 .DS_Store
 
+# Frontend
+node_modules/
+
 # LangGraph
 .langgraph/
 
@@ -21,3 +24,4 @@ __pycache__/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+Procfile
