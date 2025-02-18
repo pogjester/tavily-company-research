@@ -26,15 +26,15 @@ class IndustryAnalyzer(BaseResearcher):
         
         industry_data = {}
         
-        # If we have site_scrape data and company_url, analyze it first
+        # If we have site_scrape data, include it first
         if site_scrape := state.get('site_scrape'):
-            if company_url := state.get('company_url'):
-                industry_data[company_url] = {
-                    'title': company,
-                    'raw_content': site_scrape,
-                    'source': 'company_website',
-                    'query': f'Industry analysis on {company}'
-                }
+            msg.append("\n📊 Including site scrape data in company analysis...")
+            company_url = state.get('company_url', 'company-website')
+            industry_data[company_url] = {
+                'title': state.get('company', 'Unknown Company'),
+                'raw_content': site_scrape,
+                'query': f'Industry analysis on {company}'  # Add a default query for site scrape
+            }
         
         # Perform additional research with increased search depth
         try:

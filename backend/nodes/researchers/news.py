@@ -13,7 +13,7 @@ class NewsScanner(BaseResearcher):
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
-        Focus on recent news coverage such as:
+        Generate queries on the recent news coverage of {company} such as:
         - Recent company announcements
         - Press releases
         - Media coverage
@@ -24,15 +24,15 @@ class NewsScanner(BaseResearcher):
         
         news_data = {}
         
-        # If we have site_scrape data and company_url, analyze it first
+        # If we have site_scrape data, include it first
         if site_scrape := state.get('site_scrape'):
-            if company_url := state.get('company_url'):
-                news_data[company_url] = {
-                    'title': company,
-                    'raw_content': site_scrape,
-                    'source': 'company_website',
-                    'query': f'News on {company}'
-                }
+            msg.append("\n📊 Including site scrape data in company analysis...")
+            company_url = state.get('company_url', 'company-website')
+            news_data[company_url] = {
+                'title': state.get('company', 'Unknown Company'),
+                'raw_content': site_scrape,
+                'query': f'News and announcements about {company}'  # Add a default query for site scrape
+            }
         
         # Perform additional research with recent time filter
         try:

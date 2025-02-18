@@ -15,7 +15,7 @@ class FinancialAnalyst(BaseResearcher):
         
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
-        Focus on financial aspects such as:
+        Generate queries on the financial aspects of {company} in the {industry} industry such as:
         - Revenue and growth
         - Market valuation
         - Funding rounds
@@ -29,8 +29,9 @@ class FinancialAnalyst(BaseResearcher):
         # If we have site_scrape data, include it first
         if site_scrape := state.get('site_scrape'):
             msg += "\n📊 Including site scrape data in company analysis..."
-            financial_data[InputState['company_url']] = {
-                'title': InputState['company'],
+            company_url = state.get('company_url', 'company-website')
+            financial_data[company_url] = {
+                'title': state.get('company', 'Unknown Company'),
                 'raw_content': site_scrape,
                 'query': f'Financial information on {company}'  # Add a default query for site scrape
             }
