@@ -155,9 +155,14 @@ class Curator:
                 msg.append(f"  ⚠️ No relevant documents found")
                 continue
 
-            # Filter documents with a score above threshold
+            # Filter documents with a score above threshold and limit to top 10
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.7}
+                           if doc['evaluation']['overall_score'] >= 0.75}
+
+            # Sort by score and limit to top 10
+            if len(relevant_docs) > 10:
+                sorted_docs = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
+                relevant_docs = dict(sorted_docs[:10])
 
             if relevant_docs:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
