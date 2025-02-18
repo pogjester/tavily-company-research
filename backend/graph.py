@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class Graph:
     def __init__(self, company=None, url=None, hq_location=None, industry=None):
         # Initialize InputState
-        self.input_state = ResearchState(
+        self.input_state = InputState(
             company=company,
             company_url=url,
             hq_location=hq_location,
@@ -67,6 +67,7 @@ class Graph:
 
         # Set up the workflow
         self.workflow.set_entry_point("grounding")
+        self.workflow.set_finish_point("output")
      
         # Define the list of research nodes
         research_nodes = ["financial_analyst", "news_scanner", "industry_analyst", "company_analyst"]
@@ -99,9 +100,6 @@ class Graph:
             
         # Compile the graph
         graph = self.workflow.compile()
-        
-        # Log initial state
-        logger.debug(f"Initial state: {self.input_state}")
         
         # Execute the graph asynchronously
         async for state_update in graph.astream(self.input_state, thread):

@@ -144,7 +144,7 @@ class Curator:
             curation_tasks.append((data_field, source_type, data.keys(), docs))
 
         # Process all document types in parallel
-        all_urls = []
+        all_top_references = []  # Keep track of all top references with scores
         for data_field, source_type, urls, docs in curation_tasks:
             msg.append(f"\n{data_types[data_field]}: Found {len(docs)} documents")
 
@@ -168,19 +168,26 @@ class Curator:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
             else:
                 msg.append(f"  ⚠️ No documents met relevance threshold")
-            
-            all_urls.extend(urls)
+
+            # Collect all references with their scores
+            current_references = [(url, doc['evaluation']['overall_score']) 
+                                for url, doc in relevant_docs.items()]
+            all_top_references.extend(current_references)
 
             # Update state with curated data
             state[f'curated_{data_field}'] = relevant_docs
 
-        # Update messages
+        # Sort all references by score and select overall top 10
+        all_top_references.sort(key=lambda x: x[1], reverse=True)
+        top_reference_urls = [url for url, _ in all_top_references[:10]]
+
+        # Update messages and state with final top references
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
-        state['references'] = all_urls
-        messages.append(AIMessage(content=f"References: {state['references']}"))
-        print(f"References: {state['references']}")
+        state['references'] = top_reference_urls
+        messages.append(AIMessage(content=f"Top References: {state['references']}"))
+        print(f"Top References: {state['references']}")
 
         return state
 

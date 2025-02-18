@@ -18,9 +18,10 @@ class ResearchState(InputState):
     curated_news_data: Dict[str, Any]
     curated_industry_data: Dict[str, Any]
     curated_company_data: Dict[str, Any]
+    financial_briefing: str
+    news_briefing: str
+    industry_briefing: str
+    company_briefing: str
     references: List[str]
     briefings: Dict[str, Any]
-    report: str
-
-class OutputState(TypedDict):
     report: str

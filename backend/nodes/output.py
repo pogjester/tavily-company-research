@@ -45,22 +45,21 @@ class OutputNode:
                     md_file.write(report)
                 formatted_report = f"📥 Markdown report saved at {markdown_file_path}"
 
-            # Update state with the message while preserving all existing state
+            # Update messages in existing state
             messages = state.get('messages', [])
             messages.append(AIMessage(content=formatted_report))
             state['messages'] = messages
-            
-            # Add output info to state without overwriting anything
-            state.update({
-                'output': {
-                    'format': output_format,
-                    'path': pdf_file_path if output_format == "pdf" else markdown_file_path,
-                    'timestamp': timestamp
-                }
-            })
+            state['output'] = {
+                'format': output_format,
+                'path': pdf_file_path if output_format == "pdf" else markdown_file_path,
+                'timestamp': timestamp,
+                'report': report,
+                'briefings': state.get('briefings', {}),
+                'references': state.get('references', [])
+            }
             
             logger.info(f"Final state keys after output: {list(state.keys())}")
-            return state
+            return state  # Return the complete state with all information preserved
             
         except Exception as e:
             logger.error(f"Error formatting output: {str(e)}")

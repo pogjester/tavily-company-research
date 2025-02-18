@@ -59,7 +59,7 @@ Format your response as bullet points without introductions or conclusions."""
         
         doc_texts = []
         total_length = 0
-        for url, doc in sorted_items:
+        for _ , doc in sorted_items:
             title = doc.get('title', '')
             content = doc.get('raw_content') or doc.get('content', '')
             if len(content) > self.max_doc_length:
@@ -108,6 +108,7 @@ Create a set of bullet points with factual, verifiable information without intro
             'company_data': 'company'
         }
         
+        # Initialize a dict for all briefings
         briefings = {}
         summary = [f"Creating section briefings for {company}:"]
         
@@ -119,7 +120,10 @@ Create a set of bullet points with factual, verifiable information without intro
                 summary.append(f"Processing {data_field} ({len(curated_data)} documents)...")
                 result = await self.generate_category_briefing(curated_data, cat, context)
                 if result['content']:
+                    # Store briefing under both a collective dict and a separate key
                     briefings[cat] = result['content']
+                    state[f'{cat}_briefing'] = result['content']
+                    print(f"Briefing for {data_field}: {result['content']}")
                     summary.append(f"Completed {data_field} ({len(result['content'])} characters)")
                 else:
                     summary.append(f"Failed to generate briefing for {data_field}")

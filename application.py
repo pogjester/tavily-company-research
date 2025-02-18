@@ -60,9 +60,12 @@ async def research():
         # Run research pipeline
         logger.info("Starting research pipeline")
         results = []
-        final_state = None
-        async for state in graph.run({}, {}):
-            logger.info(f"Received state update with keys: {list(state.keys())}")
+        state = {}  # Track complete state
+        async for s in graph.run({}, {}):
+            # Merge new state updates into complete state
+            state.update(s)
+            logger.info(f"Received state update with keys: {list(s.keys())}")
+            logger.debug(f"Complete state now contains keys: {list(state.keys())}")
             
             # Log briefings if they exist
             if briefings := state.get('briefings'):
@@ -77,16 +80,15 @@ async def research():
             if messages := state.get('messages', []):
                 results.append(messages[-1].content)
                 logger.info(f"Added message: {messages[-1].content}")
-            final_state = state
 
-        if not final_state:
-            logger.error("No final state received from pipeline")
+        if not state:
+            logger.error("No state received from pipeline")
             return jsonify({"error": "Research pipeline failed"}), 500
             
-        logger.info(f"Pipeline completed. Final state contains keys: {list(final_state.keys())}")
+        logger.info(f"Pipeline completed. Final state contains keys: {list(state.get('output').keys())}")
         
         # Get the report content
-        report_content = final_state.get('report', '')
+        report_content = state.get('output', {}).get('report', '')
         
         # Debug check for report content
         print("\n\n")
@@ -97,9 +99,9 @@ async def research():
         
         if not report_content or not report_content.strip():
             logger.error("❌ Report content is empty or whitespace only!")
-            logger.error(f"Final state keys available: {list(final_state.keys())}")
+            logger.error(f"Final state keys available: {list(state.keys())}")
             logger.error("Checking briefings in final state...")
-            if briefings := final_state.get('briefings', {}):
+            if briefings := state.get('briefings', {}):
                 logger.error(f"Found briefings for sections: {list(briefings.keys())}")
                 for section, content in briefings.items():
                     logger.error(f"{section} briefing length: {len(content)} characters")
@@ -170,8 +172,8 @@ async def research():
         research_cache[data['company']] = {
             'results': results,
             'report': report_content,
-            'briefings': final_state.get('briefings', {}),
-            'references': final_state.get('references', {}),
+            'briefings': state.get('briefings', {}),
+            'references': state.get('references', {}),
             'pdf_path': pdf_path
         }
 
