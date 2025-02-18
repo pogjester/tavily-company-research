@@ -11,12 +11,14 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useEffect, useRef } from "react";
+import type { ResearchStatus } from "../lib/types";
 
 interface ProcessProps {
   isActive: boolean;
   currentStep: number;
   darkMode: boolean;
   onReset: () => void;
+  status: ResearchStatus | null;
 }
 
 export function ResearchProcess({
@@ -24,9 +26,29 @@ export function ResearchProcess({
   currentStep,
   darkMode,
   onReset,
+  status,
 }: ProcessProps) {
   const resultRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Helper function to extract queries for each analyst
+  const getQueriesForAnalyst = (analyst: string) => {
+    if (!status?.debug_info) return [];
+
+    return status.debug_info
+      .filter((info) => info.message.includes(analyst))
+      .map((info) => {
+        const match = info.message.match(/Used queries:\s*(.+)/);
+        if (match) {
+          return match[1]
+            .split("•")
+            .map((q) => q.trim())
+            .filter(Boolean);
+        }
+        return [];
+      })
+      .flat();
+  };
 
   const processes = [
     {
@@ -35,11 +57,13 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-blue-600/40" : "from-blue-500/40",
       gradientTo: darkMode ? "to-blue-500/20" : "to-blue-400/20",
       borderColor: darkMode ? "border-blue-400/20" : "border-blue-300/30",
-      queries: [
-        "Financial performance metrics",
-        "Revenue growth analysis",
-        "Market capitalization trends",
-      ],
+      queries: status
+        ? getQueriesForAnalyst("Financial Analyst")
+        : [
+            "Financial performance metrics",
+            "Revenue growth analysis",
+            "Market capitalization trends",
+          ],
     },
     {
       name: "Industry Analyst",
@@ -47,11 +71,13 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-green-600/40" : "from-green-500/40",
       gradientTo: darkMode ? "to-green-500/20" : "to-green-400/20",
       borderColor: darkMode ? "border-green-400/20" : "border-green-300/30",
-      queries: [
-        "Market position assessment",
-        "Competitive landscape analysis",
-        "Industry growth projections",
-      ],
+      queries: status
+        ? getQueriesForAnalyst("Industry Analyst")
+        : [
+            "Market position assessment",
+            "Competitive landscape analysis",
+            "Industry growth projections",
+          ],
     },
     {
       name: "Company Analyst",
@@ -59,11 +85,13 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-purple-600/40" : "from-purple-500/40",
       gradientTo: darkMode ? "to-purple-500/20" : "to-purple-400/20",
       borderColor: darkMode ? "border-purple-400/20" : "border-purple-300/30",
-      queries: [
-        "Corporate structure review",
-        "Business model analysis",
-        "Strategic initiatives",
-      ],
+      queries: status
+        ? getQueriesForAnalyst("Company Analyst")
+        : [
+            "Corporate structure review",
+            "Business model analysis",
+            "Strategic initiatives",
+          ],
     },
     {
       name: "News Scanner",
@@ -71,11 +99,13 @@ export function ResearchProcess({
       gradientFrom: darkMode ? "from-orange-600/40" : "from-orange-500/40",
       gradientTo: darkMode ? "to-orange-500/20" : "to-orange-400/20",
       borderColor: darkMode ? "border-orange-400/20" : "border-orange-300/30",
-      queries: [
-        "Recent press releases",
-        "Media sentiment analysis",
-        "Market news impact",
-      ],
+      queries: status
+        ? getQueriesForAnalyst("News Scanner")
+        : [
+            "Recent press releases",
+            "Media sentiment analysis",
+            "Market news impact",
+          ],
     },
   ];
 

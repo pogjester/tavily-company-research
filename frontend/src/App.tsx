@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { ResearchProcess } from "./components/ResearchProcess";
 import { useDarkMode } from "./hooks/useDarkMode";
+import { useResearch } from "./hooks/useResearch";
 import { cn } from "./lib/utils";
 import type { ResearchRequest } from "./lib/types";
 
 export default function App() {
   const { darkMode } = useDarkMode();
+  const { startResearch, isLoading, error, status } = useResearch();
   const [isProcessActive, setIsProcessActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<ResearchRequest>({
@@ -17,13 +19,27 @@ export default function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProcessActive(true);
-    setCurrentStep(1);
+    try {
+      // Only start if we have required fields
+      if (!formData.company) {
+        return;
+      }
 
-    // Simulate research process
-    setTimeout(() => {
-      setCurrentStep(2);
-    }, 5000);
+      // Reset any previous state
+      setIsProcessActive(false);
+      setCurrentStep(0);
+
+      // Start research with form data
+      await startResearch(formData);
+
+      // Update UI state after successful API call
+      setIsProcessActive(true);
+      setCurrentStep(1);
+    } catch (err) {
+      console.error("Failed to start research:", err);
+      setIsProcessActive(false);
+      setCurrentStep(0);
+    }
   };
 
   const handleReset = () => {
@@ -169,19 +185,25 @@ export default function App() {
 
             <button
               type="submit"
-              disabled={!formData.company || isProcessActive}
+              disabled={!formData.company || isLoading}
               className={cn(
                 "w-full py-3 px-4 rounded-lg font-medium transition-colors duration-200",
-                !formData.company || isProcessActive
+                !formData.company || isLoading
                   ? "bg-gray-400 cursor-not-allowed"
                   : darkMode
                   ? "bg-blue-600 hover:bg-blue-700 text-white"
                   : "bg-blue-500 hover:bg-blue-600 text-white"
               )}
             >
-              Start Research
+              {isLoading ? "Starting Research..." : "Start Research"}
             </button>
           </form>
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-md border border-red-200">
+              {error}
+            </div>
+          )}
         </div>
 
         <ResearchProcess
@@ -189,6 +211,7 @@ export default function App() {
           currentStep={currentStep}
           darkMode={darkMode}
           onReset={handleReset}
+          status={status}
         />
       </div>
     </div>

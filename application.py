@@ -8,6 +8,7 @@ from datetime import datetime
 import asyncio
 import uuid
 from collections import defaultdict
+from flask_cors import CORS
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +20,12 @@ load_dotenv()
 # Initialize Flask application
 application = Flask(__name__)
 app = application
+
+# Enable CORS
+CORS(app, resources={
+    r"/research*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]},
+    r"/health": {"origins": "*"}
+})
 
 # Create reports directory if it doesn't exist
 REPORTS_DIR = "reports"
