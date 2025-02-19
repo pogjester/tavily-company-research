@@ -4,6 +4,7 @@ from typing import Dict, Any, Union, List
 import os
 import logging
 from ..classes import ResearchState
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +32,16 @@ class Briefing:
         logger.info(f"Generating {category} briefing for {company} using {len(docs)} documents")
 
         prompts = {
-            'financial': f"""You are analyzing financial information about {company}.
-Based on the provided documents, create a concise briefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any information about the industry or the company. Never provide generic descriptions of GDP trends or broader economic trends.
+            'financial': f"""You are analyzing financial information about {company} in the {industry} industry.
+Based on the provided documents, create a concise financialbriefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any generic information about the industry or the company. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, don't mention it at all.
 Format your response as bullet points without introductions or conclusions.""",
-            'news': f"""You are analyzing recent news about {company}.
-Based on the provided documents, create a concise briefing covering major developments, key announcements, partnerships, and public perception. Don't provide any basic descriptions of the company.
+            'news': f"""You are analyzing recent news about {company} in the {industry} industry.
+Based on the provided documents, create a recent news summary covering major developments, key announcements, partnerships, and public perception. Don't provide any basic descriptions of the company.
 Format your response as bullet points without introductions or conclusions.""",
             'industry': f"""You are analyzing {company}'s position in the {industry} industry.
-Based on the provided documents, create a concise briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. 
+Based on the provided documents, create a concise industry briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. 
 Format your response as bullet points without introductions or conclusions.""",
-            'company': f"""You are analyzing core information about {company}.
+            'company': f"""You are analyzing core information about {company} in the {industry} industry.
 Based on the provided documents, create a concise but detailed company briefing covering offerings, history,business model, leadership, and market presence. Start at the highest level and work your way down to the most specific.
 Format your response as bullet points without introductions or conclusions."""
         }
@@ -92,6 +93,17 @@ Create a set of bullet points with factual, verifiable information without intro
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
         company = state.get('company', 'Unknown Company')
+        
+        # Send initial briefing status
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message="Preparing research briefings",
+                    result={"step": "Briefing"}
+                )
+
         context = {
             "company": company,
             "industry": state.get('industry', 'Unknown'),
@@ -101,33 +113,47 @@ Create a set of bullet points with factual, verifiable information without intro
         
         # Mapping of curated data fields to briefing categories
         categories = {
-            'financial_data': 'financial',
-            'news_data': 'news',
-            'industry_data': 'industry',
-            'company_data': 'company'
+            'financial_data': ("financial", "financial_briefing"),
+            'news_data': ("news", "news_briefing"),
+            'industry_data': ("industry", "industry_briefing"),
+            'company_data': ("company", "company_briefing")
         }
         
         # Initialize a dict for all briefings
         briefings = {}
         summary = [f"Creating section briefings for {company}:"]
         
-        for data_field, cat in categories.items():
+        # Create tasks for parallel processing
+        tasks = []
+        for data_field, (cat, briefing_key) in categories.items():
             curated_key = f'curated_{data_field}'
             curated_data = state.get(curated_key, {})
             if curated_data:
                 logger.info(f"Processing {data_field} with {len(curated_data)} documents")
                 summary.append(f"Processing {data_field} ({len(curated_data)} documents)...")
-                result = await self.generate_category_briefing(curated_data, cat, context)
+                tasks.append((
+                    self.generate_category_briefing(curated_data, cat, context),
+                    cat,
+                    briefing_key,
+                    data_field
+                ))
+            else:
+                summary.append(f"No data available for {data_field}")
+                state[briefing_key] = ""
+
+        # Process all briefings in parallel
+        if tasks:
+            results = await asyncio.gather(*(task[0] for task in tasks))
+            
+            # Process results
+            for result, (_, cat, briefing_key, data_field) in zip(results, tasks):
                 if result['content']:
-                    # Store briefing under both a collective dict and a separate key
                     briefings[cat] = result['content']
-                    state[f'{cat}_briefing'] = result['content']
-                    print(f"Briefing for {data_field}: {result['content']}")
+                    state[briefing_key] = result['content']
                     summary.append(f"Completed {data_field} ({len(result['content'])} characters)")
                 else:
                     summary.append(f"Failed to generate briefing for {data_field}")
-            else:
-                summary.append(f"No data available for {data_field}")
+                    state[briefing_key] = ""
         
         state['briefings'] = briefings
         state.setdefault('messages', []).append(AIMessage(content="\n".join(summary)))

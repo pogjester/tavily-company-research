@@ -3,6 +3,7 @@ from typing import Dict, Any
 import os
 import cohere
 from ..classes import ResearchState
+from urllib.parse import urlparse
 
 class Curator:
     def __init__(self) -> None:
@@ -19,10 +20,6 @@ class Curator:
         # Add title if available
         if title := doc.get('title'):
             parts.append(f"Title: {title}")
-            
-        # Add source query that found this document
-        if query := doc.get('query'):
-            parts.append(f"Search Query: {query}")
             
         # Try both content and raw_content
         content = doc.get('content') or doc.get('raw_content', '')
@@ -90,7 +87,7 @@ class Curator:
                     print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
 
                     # Only keep documents with good relevance
-                    if score >= 0.7:
+                    if score >= 0.3:
                         evaluated_doc = {
                             **doc,
                             "evaluation": {
@@ -103,12 +100,6 @@ class Curator:
         except Exception as e:
             print(f"Error during document evaluation: {e}")
             return []
-
-        print(f"\nKept {len(evaluated_docs)} documents with scores >= 0.7")
-        if evaluated_docs:
-            print("\nTop scoring documents:")
-            for doc in sorted(evaluated_docs, key=lambda x: x['evaluation']['overall_score'], reverse=True)[:3]:
-                print(f"- {doc.get('title', 'No title')}: {doc['evaluation']['overall_score']:.3f}")
 
         return evaluated_docs
 
@@ -140,8 +131,15 @@ class Curator:
             if not data:
                 continue
 
-            docs = list(data.values())
-            curation_tasks.append((data_field, source_type, data.keys(), docs))
+            # Filter documents by unique base URLs
+            unique_docs = {}
+            for url, doc in data.items():
+                base_url = urlparse(url).netloc
+                if base_url not in unique_docs:
+                    unique_docs[base_url] = doc
+
+            docs = list(unique_docs.values())
+            curation_tasks.append((data_field, source_type, unique_docs.keys(), docs))
 
         # Process all document types in parallel
         all_top_references = []  # Keep track of all top references with scores
@@ -157,7 +155,7 @@ class Curator:
 
             # Filter documents with a score above threshold and limit to top 10
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.75}
+                           if doc['evaluation']['overall_score'] >= 0.5}
 
             # Sort by score and limit to top 10
             if len(relevant_docs) > 10:
@@ -185,7 +183,7 @@ class Curator:
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
-        state['references'] = top_reference_urls
+        state['references'] = list(top_reference_urls)
         messages.append(AIMessage(content=f"Top References: {state['references']}"))
         print(f"Top References: {state['references']}")
 

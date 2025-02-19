@@ -1,7 +1,6 @@
 from langchain_core.messages import AIMessage
 from tavily import AsyncTavilyClient
 import os
-import time
 import logging
 
 from ..classes import InputState, ResearchState
@@ -48,21 +47,35 @@ class GroundingNode:
             )
 
             try:
-                site_extraction = await self.tavily_client.extract(url)
+                site_extraction = await self.tavily_client.extract(url, extract_depth="basic")
+                raw_contents = []
                 for item in site_extraction.get("results", []):
-                    raw_content = item.get("raw_content", "")
-                    site_scrape = {'title': company, 'raw_content': raw_content}
+                    if content := item.get("raw_content"):
+                        raw_contents.append(content)
                 
-                msg += f"\n✅ Successfully extracted content from website"
-                await self._send_update(
-                    state,
-                    "Successfully extracted website content",
-                    "site_scrape_complete",
-                    {
-                        "url": url,
-                        "content_length": len(raw_content) if raw_content else 0
+                if raw_contents:
+                    site_scrape = {
+                        'title': company,
+                        'raw_content': "\n\n".join(raw_contents)
                     }
-                )
+                    msg += f"\n✅ Successfully extracted content from website"
+                    await self._send_update(
+                        state,
+                        "Successfully extracted website content",
+                        "site_scrape_complete",
+                        {
+                            "url": url,
+                            "content_length": len(site_scrape['raw_content'])
+                        }
+                    )
+                else:
+                    msg += f"\n⚠️ No content found in website extraction"
+                    await self._send_update(
+                        state,
+                        "No content found in website extraction",
+                        "site_scrape_error",
+                        {"error": "No content found in extraction results"}
+                    )
             except Exception as e:
                 error_msg = f"⚠️ Error extracting website content: {str(e)}"
                 print(error_msg)

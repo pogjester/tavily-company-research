@@ -13,6 +13,7 @@ from datetime import datetime
 import asyncio
 import uuid
 from collections import defaultdict
+from backend.services.mongodb import MongoDBService
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -48,10 +49,11 @@ async def shutdown_event():
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],  # Allow all origins during testing
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Create reports directory if it doesn't exist
@@ -71,6 +73,9 @@ job_status = defaultdict(lambda: {
     "debug_info": [],
     "last_update": datetime.now().isoformat()
 })
+
+# Initialize MongoDB service
+mongodb = MongoDBService(os.getenv("MONGODB_URI"))
 
 def update_job_status(job_id: str, status: str = None, message: str = None, error: str = None, result: dict = None):
     """Update job status with debug information."""
@@ -100,22 +105,26 @@ class ResearchRequest(BaseModel):
 async def process_research(job_id: str, data: ResearchRequest):
     """Background task to process research request."""
     try:
+        # Store initial job data
+        mongodb.create_job(job_id, data.dict())
+        
         # Wait a short time for WebSocket connection to be established
         await asyncio.sleep(1)
         
-        update_job_status(job_id, status="processing", message=f"Starting research for {data.company}")
+        # First status update
         await manager.send_status_update(
             job_id,
             status="processing",
-            message=f"Starting research for {data.company}"
+            message=f"Starting research for {data.company}",
+            result={"step": "Initializing..."}  # Add result object
         )
         
         # Initialize research graph
-        update_job_status(job_id, message="Initializing research graph")
         await manager.send_status_update(
             job_id,
             status="processing",
-            message="Initializing research graph"
+            message="Initializing research graph",
+            result={"step": "Graph Intializing..."}  # Add result object
         )
         
         graph = Graph(
@@ -232,18 +241,28 @@ async def process_research(job_id: str, data: ResearchRequest):
             result=final_result
         )
         
-    except Exception as e:
-        logger.error(f"Error processing job {job_id}: {str(e)}", exc_info=True)
-        update_job_status(
-            job_id,
-            status="failed",
-            message=f"Error during research: {str(e)}",
-            error=str(e)
+        # Store final results
+        mongodb.update_job(
+            job_id=job_id,
+            status="completed"
         )
-        await manager.send_status_update(
-            job_id,
+        
+        # Store the full report separately
+        mongodb.store_report(
+            job_id=job_id,
+            report_data={
+                "report": final_result["report"],
+                "references": final_result.get("references", []),
+                "sections_completed": final_result.get("sections_completed", []),
+                "analyst_queries": final_result.get("analyst_queries", {})
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Research failed: {e}")
+        mongodb.update_job(
+            job_id=job_id,
             status="failed",
-            message=f"Error during research: {str(e)}",
             error=str(e)
         )
 
@@ -329,6 +348,22 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
         logger.error(f"WebSocket error for job {job_id}: {str(e)}", exc_info=True)
         manager.disconnect(websocket, job_id)
 
+@app.get("/research/{job_id}")
+async def get_research(job_id: str):
+    """Retrieve research results by job ID."""
+    job = mongodb.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Research job not found")
+    return job
+
+@app.get("/research/{job_id}/report")
+async def get_research_report(job_id: str):
+    """Retrieve research report by job ID."""
+    report = mongodb.get_report(job_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Research report not found")
+    return report
+
 if __name__ == '__main__':
     uvicorn.run(
         "application:app",
@@ -336,4 +371,4 @@ if __name__ == '__main__':
         port=8000,
         reload=True,
         ws='websockets'
-    ) 
+    )

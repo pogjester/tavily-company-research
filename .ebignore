@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+__pycache__/
+*.pyc
+reports/
+.pytest_cache/
+simple-frontend/
+advanced-frontend/
+reports/

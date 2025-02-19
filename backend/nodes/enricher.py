@@ -13,7 +13,7 @@ class Enricher:
         if not tavily_key:
             raise ValueError("TAVILY_API_KEY environment variable is not set")
         self.tavily_client = AsyncTavilyClient(api_key=tavily_key)
-        self.batch_size = 10  # Process documents in batches
+        self.batch_size = 20  # Increase batch size from 10 to 20
 
     async def fetch_single_content(self, url: str) -> Dict[str, str]:
         """Fetch raw content for a single URL."""
@@ -27,7 +27,7 @@ class Enricher:
 
     async def fetch_raw_content(self, urls: List[str]) -> Dict[str, str]:
         """Fetch raw content for multiple URLs in parallel."""
-        # Process in batches to avoid overwhelming the API
+        # Process in batches of 20
         raw_contents = {}
         for i in range(0, len(urls), self.batch_size):
             batch_urls = urls[i:i + self.batch_size]
@@ -86,6 +86,13 @@ class Enricher:
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
+
+        await state.get('websocket_manager').send_status_update(
+            job_id=state.get('job_id'),
+            status="processing",
+            message="Enriching research using Tavily Extract",
+            result={"step": "Enriching"}
+        )
 
         return state
 

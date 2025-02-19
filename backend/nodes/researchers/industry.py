@@ -24,6 +24,24 @@ class IndustryAnalyzer(BaseResearcher):
         - Regulatory environment
         - Market size and growth
         """)
+
+        subqueries_msg = "🔍 Subqueries for industry analysis:\n" + "\n".join([f"• {query}" for query in queries])
+        messages = state.get('messages', [])
+        messages.append(AIMessage(content=subqueries_msg))
+        state['messages'] = messages
+
+        # Send queries through WebSocket
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Industry analysis queries generated",
+                    result={
+                        "analyst_type": "Industry Analyst",
+                        "queries": queries
+                    }
+                )
         
         industry_data = {}
         
@@ -41,7 +59,7 @@ class IndustryAnalyzer(BaseResearcher):
         try:
             # Store documents with their respective queries
             for query in queries:
-                documents = await self.search_documents([query], search_depth="advanced")
+                documents = await self.search_documents([query])
                 if documents:  # Only process if we got results
                     for url, doc in documents.items():
                         doc['query'] = query  # Associate each document with its query

@@ -22,6 +22,11 @@ class NewsScanner(BaseResearcher):
         - Executive changes
         - Strategic initiatives
         """)
+
+        subqueries_msg = "🔍 Subqueries for news analysis:\n" + "\n".join([f"• {query}" for query in queries])
+        messages = state.get('messages', [])
+        messages.append(AIMessage(content=subqueries_msg))
+        state['messages'] = messages
         
         news_data = {}
         
@@ -54,6 +59,19 @@ class NewsScanner(BaseResearcher):
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
         state['news_data'] = news_data
+
+        # Send queries through WebSocket
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"News scanner queries generated",
+                    result={
+                        "analyst_type": "News Scanner",
+                        "queries": queries
+                    }
+                )
         
         return {
             'message': msg,

@@ -7,7 +7,6 @@ from .base import BaseResearcher
 class CompanyAnalyzer(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
-        self.analyst_type = "company_analyst"  # Add this if not present
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
@@ -20,14 +19,28 @@ class CompanyAnalyzer(BaseResearcher):
         - Company history and milestones
         - Leadership and management team
         - Business model and strategy
-        - Technology and innovation
-        - Mission and vision statements
-        - Recent innovations and R&D
-        - Customer base and target market
-        - Geographic presence and expansion
-        
+
         Cover both historical context and current operations.
         """)
+
+        # Add message to show subqueries with emojis
+        subqueries_msg = "🔍 Subqueries for company analysis:\n" + "\n".join([f"• {query}" for query in queries])
+        messages = state.get('messages', [])
+        messages.append(AIMessage(content=subqueries_msg))
+        state['messages'] = messages
+
+    # Send queries through WebSocket
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Company analysis queries generated",
+                    result={
+                        "analyst_type": "Company Analyst",
+                        "queries": queries
+                    }
+                )
         
         company_data = {}
         

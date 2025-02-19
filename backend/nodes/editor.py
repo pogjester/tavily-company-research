@@ -4,7 +4,6 @@ from typing import Dict, Any
 from datetime import datetime
 import os
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,6 @@ class Editor:
             temperature=0,
             max_tokens=4096,
             api_key=openai_key,
-            streaming=True
         )
 
     async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
@@ -35,75 +33,55 @@ class Editor:
         logger.info(f"Starting report compilation for {company}")
         logger.info(f"Available briefing sections: {list(briefings.keys())}")
         
-        sections = {
-            'company': '🏢 Company Overview',
-            'industry': '🏭 Industry Analysis',
-            'financial': '💰 Financial Analysis',
-            'news': '📰 Recent Developments'
-        }
+        # Combine all briefings into a single content block
+        combined_content = "\n\n".join(
+            f"## {header.title()}\n---\n{content}"  # Replace === with ---
+            for header, content in briefings.items()
+        )
+        
+        prompt = f"""You are creating a comprehensive research report about {company} in the {industry} industry (HQ:{hq}).
+The following contains bullet-point information for various sections:
 
-        # Generate section drafts in parallel
-        async def generate_section(key: str, header: str, content: str) -> str:
-            if not content:
-                return ""
-                
-            prompt = f"""You are creating the {header} section of a research report about {company} in the {industry} industry (HQ:{hq}).
-The following contains bullet-point information for this section:
+{combined_content}
 
-{content}
-
-Create a well-structured final report that:
+Create a well-structured, detailed final report that:
 1. Maintains the distinct sections with their original headers
-2. Ensures information flows logically within sections
-3. Removes any redundant or repetitive points between sections
-4. Groups related points together within each section
-5. Maintains factual, concise language throughout
-6. Eliminates any points that are not relevant to {company} in the {industry} industry
+2. Removes redundant or repetitive points between sections (critical!)
+3. Maintains factual, concise language throughout
+4. Eliminates any points that are not relevant to {company} in the {industry} industry
 
 Format Requirements:
 - Do not add any introductions or conclusions
+- Do not mention if information wasn't found in the documents
 - Do not add transitional text between sections
-- Keep each point clear and factual
 - Ensure information is current as of {datetime.now().strftime("%Y-%m-%d")}
 
-Return only the formatted section. No explanation."""
-
-            try:
-                response = await self.llm.ainvoke(prompt)
-                return f"{header}\n{'='*40}\n{response.content.strip()}\n"
-            except Exception as e:
-                logger.error(f"Error generating {header} section: {e}")
-                return ""
-
-        # Generate all sections in parallel
-        section_tasks = []
-        for key, header in sections.items():
-            if content := briefings.get(key):
-                logger.info(f"Generating {header} section with {len(content)} characters")
-                section_tasks.append(generate_section(key, header, content))
-            else:
-                logger.info(f"Missing {header} section")
-
-        if not section_tasks:
-            logger.error("No sections available to compile!")
-            return ""
+Return only the formatted report. No explanation."""
 
         try:
-            # Run all section generations in parallel
-            section_results = await asyncio.gather(*section_tasks)
-            edited_content = "\n\n".join(section for section in section_results if section)
+            await state.get('websocket_manager').send_status_update(
+                job_id=state.get('job_id'),
+                status="processing",
+                message="Compiling the final research report",
+                result={"step": "Editor"}
+            )
+            response = await self.llm.ainvoke(prompt)
+            final_report = response.content.strip()
             
-            if not edited_content:
-                logger.error("No content generated from sections")
+            if not final_report:
+                logger.error("No content generated from briefings")
                 return ""
 
             # Format references
-            reference_lines = ["\n\n📚 References\n" + "="*40 + "\n"]
+            reference_lines = [
+                "\n\n## References\n---\n"  # Match the format of other sections
+            ]
             references = state.get('references', [])
             for ref in references:
-                reference_lines.append(f"• {ref}")
+                # Format as markdown link - URL is both the text and the link
+                reference_lines.append(f"• [{ref}]({ref})")
                 
-            final_report = edited_content + "\n".join(reference_lines)
+            final_report += "\n".join(reference_lines)
             logger.info(f"Final report compiled with {len(final_report)} characters")
             
             # Log a preview of the report
@@ -116,7 +94,7 @@ Return only the formatted section. No explanation."""
             return final_report
             
         except Exception as e:
-            logger.error(f"Error during parallel section generation: {e}")
+            logger.error(f"Error generating final report: {e}")
             return ""
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:

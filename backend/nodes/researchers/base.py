@@ -4,14 +4,9 @@ from datetime import datetime
 from openai import AsyncOpenAI
 from tavily import AsyncTavilyClient
 from typing import Dict, Any, List
+import logging
 
-def convert_keys_to_str(data):
-    if isinstance(data, dict):
-        return {str(k): convert_keys_to_str(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [convert_keys_to_str(item) for item in data]
-    else:
-        return data
+logger = logging.getLogger(__name__)
 
 class BaseResearcher:
     def __init__(self):
@@ -37,26 +32,35 @@ class BaseResearcher:
 {self._format_query_prompt(prompt, company, current_year)}"""
                 }],
                 temperature=0,
-                max_tokens=4096,
-                stream=True
+                max_tokens=4096
             )
             
+            # Log the response for debugging
+            logger.debug(f"OpenAI response: {response}")
+
             queries = [
                 q.strip() 
                 for q in response.choices[0].message.content.splitlines() 
                 if q.strip()
             ]
             
-            await self._send_update(
-                f"Generated {len(queries)} queries",
-                "query_generation_complete",
-                {"queries": queries}
-            )
-            
+            if not queries:
+                raise ValueError(f"No queries generated for {company}")
+
             return queries[:4]  # Ensure max 4 queries
             
         except Exception as e:
-            return self._fallback_queries(company, current_year)
+            logger.error(f"Error generating queries for {company}: {e}")
+            # Send error status
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="error",
+                        message=f"Failed to generate research queries: {str(e)}",
+                        error=f"Query generation failed: {str(e)}"
+                    )
+            return []
 
     def _format_query_prompt(self, prompt, company, year):
         return f"""{prompt}
@@ -64,7 +68,7 @@ class BaseResearcher:
         Important Guidelines:
         - Focus ONLY on {company}-specific information
         - Include the year {year} in each query
-        - Make queries precise and targeted
+        - Make queries brief and broad-sweeping
         - Provide exactly 4 search queries (one per line)"""
 
     def _fallback_queries(self, company, year):
@@ -79,18 +83,12 @@ class BaseResearcher:
         if not query or len(query.split()) < 3:
             return {}
 
-        await self._send_update(
-            "Starting web search",
-            "search_start",
-            {"query": query}
-        )
-
         try:
             results = await self.tavily_client.search(
                 query,
-                search_depth="advanced",
+                search_depth="basic",
                 include_raw_content=False,
-                max_results=5
+                max_results=10
             )
             
             docs = {}
@@ -108,34 +106,35 @@ class BaseResearcher:
                     "score": result.get("score", 0.0)
                 }
 
-            await self._send_update(
-                f"Found {len(docs)} documents",
-                "search_complete",
-                {"query": query, "count": len(docs)}
-            )
-            
             return docs
             
         except Exception as e:
-            await self._send_update(
-                "Search failed",
-                "search_error",
-                {"query": query, "error": str(e)}
-            )
+            logger.error(f"Error searching query '{query}': {e}")
             return {}
 
     async def search_documents(self, queries: List[str]) -> Dict[str, Any]:
+        if not queries:
+            logger.error("No valid queries to search")
+            return {}
+
         valid_queries = [q for q in queries if isinstance(q, str) and len(q.split()) >= 3]
+        if not valid_queries:
+            logger.error("No valid queries after filtering")
+            return {}
 
-        tasks = [self.search_single_query(q) for q in valid_queries]
-        results = await asyncio.gather(*tasks)
-        
-        merged_docs = {}
-        for result_dict in results:
-            merged_docs.update(result_dict)
+        try:
+            tasks = [self.search_single_query(q) for q in valid_queries]
+            results = await asyncio.gather(*tasks)
+            
+            merged_docs = {}
+            for result_dict in results:
+                merged_docs.update(result_dict)
 
-        return merged_docs
+            if not merged_docs:
+                logger.error("No documents found from any query")
+            
+            return merged_docs
 
-    async def analyze(self, state):
-        analyzed = convert_keys_to_str(state)
-        return analyzed
+        except Exception as e:
+            logger.error(f"Error during document search: {e}")
+            return {}

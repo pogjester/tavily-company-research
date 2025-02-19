@@ -54,6 +54,7 @@ uvicorn==0.27.1
 yarl==1.18.3
 gunicorn==21.2.0
 fastapi==0.110.0
-websockets==15.0
+websockets==12.0
 python-multipart==0.0.9
 starlette==0.36.3
+pymongo==4.6.1
