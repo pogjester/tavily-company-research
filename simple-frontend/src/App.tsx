@@ -80,10 +80,15 @@ function App() {
     ws.onerror = (event) => {
       console.error("WebSocket error:", event);
       setError("WebSocket connection error");
+      setIsResearching(false);
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
+    ws.onclose = (event) => {
+      console.log("WebSocket disconnected", event);
+      if (isResearching) {
+        setError("Research connection lost. Please try again.");
+        setIsResearching(false);
+      }
     };
 
     wsRef.current = ws;
@@ -339,6 +344,17 @@ function App() {
                       <h2 className="text-xl font-semibold text-white mt-8 mb-4">
                         {children}
                       </h2>
+                    ),
+                    hr: () => <hr className="border-t border-gray-700 my-4" />,
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 underline"
+                      >
+                        {children}
+                      </a>
                     ),
                   }}
                 >
