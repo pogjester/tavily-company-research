@@ -126,5 +126,5 @@ class Graph:
         thread = {"configurable": {"thread_id": "2"}}
 
         # Compile the workflow with checkpointer and interrupt configuration
-        graph = self.workflow.compile(thread=thread)
+        graph = self.workflow.compile()
         return graph

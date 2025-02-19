@@ -32,7 +32,7 @@ class Briefing:
 
         prompts = {
             'financial': f"""You are analyzing financial information about {company}.
-Based on the provided documents, create a concise briefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any information about the industry or the company. Never provide generic descriptions of GDP trends or broader economic trends.
+Based on the provided documents, create a concise briefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any generic information about the industry or the company. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, don't mention it.
 Format your response as bullet points without introductions or conclusions.""",
             'news': f"""You are analyzing recent news about {company}.
 Based on the provided documents, create a concise briefing covering major developments, key announcements, partnerships, and public perception. Don't provide any basic descriptions of the company.

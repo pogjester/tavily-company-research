@@ -4,7 +4,6 @@ from typing import Dict, Any
 from datetime import datetime
 import os
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,6 @@ class Editor:
             temperature=0,
             max_tokens=4096,
             api_key=openai_key,
-            streaming=True
         )
 
     async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:

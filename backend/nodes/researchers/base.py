@@ -60,7 +60,7 @@ class BaseResearcher:
         - Focus ONLY on {company}-specific information
         - Include the year {year} in each query
         - Make queries precise and targeted
-        - Provide exactly 4 search queries (one per line)"""
+        - Provide exactly 5 search queries (one per line)"""
 
     def _fallback_queries(self, company, year):
         return [
