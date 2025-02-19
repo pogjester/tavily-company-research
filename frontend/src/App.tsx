@@ -1,144 +1,228 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { useState } from "react";
+import { ResearchProcess } from "./components/ResearchProcess";
+import { useDarkMode } from "./hooks/useDarkMode";
+import { useResearch } from "./hooks/useResearch";
+import { cn } from "./lib/utils";
+import type { ResearchRequest } from "./lib/types";
+import { ResearchProvider } from "./store/ResearchContext";
 
-function App() {
-  const [formData, setFormData] = useState({
+export default function App() {
+  const { darkMode } = useDarkMode();
+  const { startResearch, isLoading, error, status } = useResearch();
+  const [isProcessActive, setIsProcessActive] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<ResearchRequest>({
     company: "",
     company_url: "",
-    hq_location: "",
     industry: "",
+    hq_location: "",
   });
-  const [jobId, setJobId] = useState("");
-  const [wsUrl, setWsUrl] = useState("");
-  const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
-  const [finalReport, setFinalReport] = useState("");
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // POST to the research endpoint
-      const res = await axios.post("http://localhost:8000/research", formData);
-      setJobId(res.data.job_id);
-      // Construct WebSocket URL
-      setWsUrl(`ws://localhost:8000/research/ws/${res.data.job_id}`);
-    } catch (error) {
-      console.error("Failed to start research:", error);
+      // Only start if we have required fields
+      if (!formData.company) {
+        return;
+      }
+
+      // Reset any previous state
+      setIsProcessActive(false);
+      setCurrentStep(0);
+
+      // Start research with form data
+      await startResearch(formData);
+
+      // Update UI state after successful API call
+      setIsProcessActive(true);
+      setCurrentStep(1);
+    } catch (err) {
+      console.error("Failed to start research:", err);
+      setIsProcessActive(false);
+      setCurrentStep(0);
     }
   };
 
-  useEffect(() => {
-    if (!wsUrl) return;
-    const ws = new WebSocket(wsUrl);
-    ws.onopen = () => {
-      console.log("WebSocket connected");
-    };
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setStatusUpdates((prev) => [...prev, JSON.stringify(data)]);
-      // When research is complete, assume there is a report in the result
-      if (data.status === "completed" && data.result) {
-        setFinalReport(data.result.report);
-      }
-    };
-    ws.onerror = (err) => console.error("WebSocket error:", err);
-    ws.onclose = () => console.log("WebSocket closed");
-    return () => ws.close();
-  }, [wsUrl]);
+  const handleReset = () => {
+    setIsProcessActive(false);
+    setCurrentStep(0);
+    setFormData({
+      company: "",
+      company_url: "",
+      industry: "",
+      hq_location: "",
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10">
-      <h1 className="text-4xl font-bold mb-6">Company Research Assistant</h1>
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow-md w-full max-w-md"
+    <ResearchProvider>
+      <div
+        className={cn(
+          "min-h-screen w-full transition-colors duration-200",
+          darkMode ? "bg-gray-900" : "bg-gray-50"
+        )}
       >
-        <div className="mb-4">
-          <label htmlFor="company" className="block mb-1 font-semibold">
-            Company Name *
-          </label>
-          <input
-            type="text"
-            id="company"
-            name="company"
-            value={formData.company}
-            onChange={handleChange}
-            required
-            className="w-full border rounded px-3 py-2"
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto">
+            <h1
+              className={cn(
+                "text-4xl font-bold mb-8 text-center",
+                darkMode ? "text-white" : "text-gray-900"
+              )}
+            >
+              Company Research Assistant
+            </h1>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label
+                  htmlFor="company"
+                  className={cn(
+                    "block text-sm font-medium mb-2",
+                    darkMode ? "text-gray-200" : "text-gray-700"
+                  )}
+                >
+                  Company Name *
+                </label>
+                <input
+                  type="text"
+                  id="company"
+                  value={formData.company}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      company: e.target.value,
+                    }))
+                  }
+                  className={cn(
+                    "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                    darkMode
+                      ? "bg-gray-800 border-gray-700 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
+                  )}
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="company_url"
+                  className={cn(
+                    "block text-sm font-medium mb-2",
+                    darkMode ? "text-gray-200" : "text-gray-700"
+                  )}
+                >
+                  Company Website
+                </label>
+                <input
+                  type="url"
+                  id="company_url"
+                  value={formData.company_url}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      company_url: e.target.value,
+                    }))
+                  }
+                  className={cn(
+                    "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                    darkMode
+                      ? "bg-gray-800 border-gray-700 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
+                  )}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="industry"
+                  className={cn(
+                    "block text-sm font-medium mb-2",
+                    darkMode ? "text-gray-200" : "text-gray-700"
+                  )}
+                >
+                  Industry
+                </label>
+                <input
+                  type="text"
+                  id="industry"
+                  value={formData.industry}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      industry: e.target.value,
+                    }))
+                  }
+                  className={cn(
+                    "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                    darkMode
+                      ? "bg-gray-800 border-gray-700 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
+                  )}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="hq_location"
+                  className={cn(
+                    "block text-sm font-medium mb-2",
+                    darkMode ? "text-gray-200" : "text-gray-700"
+                  )}
+                >
+                  HQ Location
+                </label>
+                <input
+                  type="text"
+                  id="hq_location"
+                  value={formData.hq_location}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      hq_location: e.target.value,
+                    }))
+                  }
+                  className={cn(
+                    "w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors duration-200",
+                    darkMode
+                      ? "bg-gray-800 border-gray-700 text-white"
+                      : "bg-white border-gray-300 text-gray-900"
+                  )}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!formData.company || isLoading}
+                className={cn(
+                  "w-full py-3 px-4 rounded-lg font-medium transition-colors duration-200",
+                  !formData.company || isLoading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : darkMode
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-blue-500 hover:bg-blue-600 text-white"
+                )}
+              >
+                {isLoading ? "Starting Research..." : "Start Research"}
+              </button>
+            </form>
+
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-md border border-red-200">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <ResearchProcess
+            isActive={isProcessActive}
+            currentStep={currentStep}
+            darkMode={darkMode}
+            onReset={handleReset}
+            status={status}
           />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="company_url" className="block mb-1 font-semibold">
-            Company URL
-          </label>
-          <input
-            type="url"
-            id="company_url"
-            name="company_url"
-            value={formData.company_url}
-            onChange={handleChange}
-            className="w-full border rounded px-3 py-2"
-          />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="hq_location" className="block mb-1 font-semibold">
-            HQ Location
-          </label>
-          <input
-            type="text"
-            id="hq_location"
-            name="hq_location"
-            value={formData.hq_location}
-            onChange={handleChange}
-            className="w-full border rounded px-3 py-2"
-          />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="industry" className="block mb-1 font-semibold">
-            Industry
-          </label>
-          <input
-            type="text"
-            id="industry"
-            name="industry"
-            value={formData.industry}
-            onChange={handleChange}
-            className="w-full border rounded px-3 py-2"
-          />
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-        >
-          Start Research
-        </button>
-      </form>
-      <div className="mt-8 w-full max-w-md">
-        <h2 className="text-xl font-semibold mb-4">Status Updates</h2>
-        <div className="bg-white p-4 rounded shadow h-64 overflow-auto">
-          {statusUpdates.map((update, idx) => (
-            <p key={idx} className="text-sm">
-              {update}
-            </p>
-          ))}
         </div>
       </div>
-      {finalReport && (
-        <div className="mt-8 w-full max-w-md">
-          <h2 className="text-xl font-semibold mb-4">Final Research Report</h2>
-          <div className="bg-white p-4 rounded shadow">
-            <pre className="text-sm whitespace-pre-wrap">{finalReport}</pre>
-          </div>
-        </div>
-      )}
-    </div>
+    </ResearchProvider>
   );
 }
-
-export default App;
