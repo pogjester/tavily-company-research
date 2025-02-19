@@ -49,20 +49,11 @@ async def shutdown_event():
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1",
-        "http://localhost",
-        "https://tavily-company-research-cnaqlzpn7-pogjesters-projects.vercel.app/",
-        "https://*.elasticbeanstalk.com",
-        "https://*.vercel.app",  # Add Vercel domain
-        "https://tavily-company-research.vercel.app"  # Add your specific Vercel domain
-    ],
+    allow_origins=["*"],  # Allow all origins during testing
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Create reports directory if it doesn't exist

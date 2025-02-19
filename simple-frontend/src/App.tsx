@@ -20,14 +20,31 @@ type ResearchOutput = {
   details: Record<string, any>;
 };
 
+console.log("=== DIRECT CONSOLE TEST ===");
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
 
-console.log("Environment:", import.meta.env.MODE);
-console.log("API URL:", import.meta.env.VITE_API_URL);
-console.log("WS URL:", import.meta.env.VITE_WS_URL);
+// Log environment variables immediately
+console.log({
+  mode: import.meta.env.MODE,
+  api_url: API_URL,
+  ws_url: WS_URL,
+});
+
+// Add a window load event
+window.addEventListener("load", () => {
+  console.log("=== Window Loaded ===");
+  console.log("API URL (on load):", import.meta.env.VITE_API_URL);
+});
 
 function App() {
+  // Add useEffect for component mount logging
+  useEffect(() => {
+    console.log("=== Component Mounted ===");
+    console.log("Form ready for submission");
+  }, []);
+
   const [formData, setFormData] = useState({
     companyName: "",
     companyUrl: "",
@@ -108,45 +125,46 @@ function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Form submitted");
     setIsResearching(true);
-    console.log("Form Data:", formData);
-    console.log("Making request to:", `${API_URL}/research`);
 
     try {
-      const requestBody = {
-        company: formData.companyName,
-        company_url: formData.companyUrl || undefined,
-        industry: formData.companyIndustry || undefined,
-        hq_location: formData.companyHq || undefined,
-      };
-      console.log("Request body:", requestBody);
+      console.log("Attempting fetch to:", `${API_URL}/research`);
 
       const response = await fetch(`${API_URL}/research`, {
         method: "POST",
+        mode: "cors", // Keep this
+        credentials: "omit", // Changed from 'include' to 'omit'
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          company: formData.companyName,
+          company_url: formData.companyUrl || undefined,
+          industry: formData.companyIndustry || undefined,
+          hq_location: formData.companyHq || undefined,
+        }),
       });
 
-      console.log("Response:", response);
+      console.log("Fetch response received:", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Error response:", errorText);
+        console.log("Error text:", errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("Research started:", data);
+      console.log("Response data:", data);
 
       if (data.job_id) {
+        console.log("Connecting WebSocket with job_id:", data.job_id);
         connectWebSocket(data.job_id);
       } else {
         throw new Error("No job ID received");
       }
     } catch (err) {
-      console.error("Error starting research:", err);
+      console.log("Caught error:", err);
       setError(err instanceof Error ? err.message : "Failed to start research");
       setIsResearching(false);
     }
