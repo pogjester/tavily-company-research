@@ -4,5 +4,9 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "VITE_API_URL": "https://python-env.eba-2czpkkmi.us-east-1.elasticbeanstalk.com",
+    "VITE_WS_URL": "wss://python-env.eba-2czpkkmi.us-east-1.elasticbeanstalk.com"
+  }
 }

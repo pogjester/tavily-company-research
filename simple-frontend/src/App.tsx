@@ -23,6 +23,10 @@ type ResearchOutput = {
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
 
+console.log("Environment:", import.meta.env.MODE);
+console.log("API URL:", import.meta.env.VITE_API_URL);
+console.log("WS URL:", import.meta.env.VITE_WS_URL);
+
 function App() {
   const [formData, setFormData] = useState({
     companyName: "",
@@ -105,23 +109,27 @@ function App() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsResearching(true);
-    console.log("Making request to:", API_URL);
+    console.log("Form Data:", formData);
+    console.log("Making request to:", `${API_URL}/research`);
 
     try {
+      const requestBody = {
+        company: formData.companyName,
+        company_url: formData.companyUrl || undefined,
+        industry: formData.companyIndustry || undefined,
+        hq_location: formData.companyHq || undefined,
+      };
+      console.log("Request body:", requestBody);
+
       const response = await fetch(`${API_URL}/research`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          company: formData.companyName,
-          company_url: formData.companyUrl || undefined,
-          industry: formData.companyIndustry || undefined,
-          hq_location: formData.companyHq || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      console.log("Response status:", response.status);
+      console.log("Response:", response);
 
       if (!response.ok) {
         const errorText = await response.text();
