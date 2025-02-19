@@ -7,6 +7,7 @@ import {
   Search,
   Loader2,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 type ResearchStatus = {
   step: string;
@@ -61,7 +62,9 @@ function App() {
           setIsResearching(false);
           setOutput({
             summary: "Research completed",
-            details: statusData.result,
+            details: {
+              report: statusData.result.report,
+            },
           });
         } else if (statusData.status === "failed") {
           setIsResearching(false);
@@ -312,11 +315,13 @@ function App() {
             <h2 className="text-lg font-semibold text-white mb-4">
               Research Results
             </h2>
-            <div className="prose prose-invert prose-sm">
+            <div className="prose prose-invert prose-sm max-w-none">
               <p className="text-gray-300">{output.summary}</p>
-              <pre className="mt-4 bg-gray-800/50 p-4 rounded-lg overflow-x-auto border border-gray-700 text-gray-300">
-                {JSON.stringify(output.details, null, 2)}
-              </pre>
+              <div className="mt-4 bg-gray-800/50 p-4 rounded-lg overflow-x-auto border border-gray-700">
+                <ReactMarkdown className="text-gray-300">
+                  {output.details.report || "No report available"}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         )}
