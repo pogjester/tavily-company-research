@@ -19,9 +19,11 @@ class FinancialAnalyst(BaseResearcher):
             queries = await self.generate_queries(
                 state,
                 """
-                Generate queries on the financial aspects of {company}...
-                """
-            )
+                 Generate queries on the financial analysis of {company} in the {industry} industry such as:
+        - Fundraising history and valuation
+        - Financial statements and key metrics
+        - Revenue and profit sources
+        """)
             
             # Add message to show subqueries with emojis
             subqueries_msg = "🔍 Subqueries for financial analysis:\n" + "\n".join([f"• {query}" for query in queries])

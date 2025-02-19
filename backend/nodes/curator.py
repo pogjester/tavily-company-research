@@ -155,7 +155,7 @@ class Curator:
 
             # Filter documents with a score above threshold and limit to top 10
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.6}
+                           if doc['evaluation']['overall_score'] >= 0.5}
 
             # Sort by score and limit to top 10
             if len(relevant_docs) > 10:
