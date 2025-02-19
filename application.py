@@ -50,11 +50,13 @@ async def shutdown_event():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5174", 
-        "http://127.0.0.1:5174",
         "http://localhost:5173",
-        "http://127.0.0.1",  # Allow requests from 127.0.0.1
-        "http://localhost"   # Allow requests from localhost
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1",
+        "http://localhost",
+        "python-env.eba-2czpkkmi.us-east-1.elasticbeanstalk.com",  # Add your frontend domain
+        "https://*.elasticbeanstalk.com"     # Allow all EB domains
     ],
     allow_credentials=True,
     allow_methods=["*"],
