@@ -119,3 +119,8 @@ class Graph:
             self.job_id,
             update
         )
+    
+    def compile(self):
+        thread = {"configurable": {"thread_id": "2"}}
+        graph = self.workflow.compile()
+        return graph
