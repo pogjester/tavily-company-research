@@ -105,12 +105,7 @@ function App() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsResearching(true);
-    setStatus({
-      step: "Initializing",
-      message: "Starting company research...",
-    });
-    setOutput(null);
-    setError(null);
+    console.log("Making request to:", API_URL);
 
     try {
       const response = await fetch(`${API_URL}/research`, {
@@ -126,7 +121,11 @@ function App() {
         }),
       });
 
+      console.log("Response status:", response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 

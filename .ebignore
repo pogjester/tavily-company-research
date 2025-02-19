@@ -4,4 +4,7 @@
 __pycache__/
 *.pyc
 reports/
-.pytest_cache/ 
+.pytest_cache/
+simple-frontend/
+advanced-frontend/
+reports/

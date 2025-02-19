@@ -55,8 +55,10 @@ app.add_middleware(
         "http://127.0.0.1:5174",
         "http://127.0.0.1",
         "http://localhost",
-        "python-env.eba-2czpkkmi.us-east-1.elasticbeanstalk.com",  # Add your frontend domain
-        "https://*.elasticbeanstalk.com"     # Allow all EB domains
+        "https://tavily-company-research-cnaqlzpn7-pogjesters-projects.vercel.app/",
+        "https://*.elasticbeanstalk.com",
+        "https://*.vercel.app",  # Add Vercel domain
+        "https://tavily-company-research.vercel.app"  # Add your specific Vercel domain
     ],
     allow_credentials=True,
     allow_methods=["*"],
