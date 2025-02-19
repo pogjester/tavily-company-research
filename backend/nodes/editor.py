@@ -34,14 +34,17 @@ class Editor:
         logger.info(f"Available briefing sections: {list(briefings.keys())}")
         
         # Combine all briefings into a single content block
-        combined_content = "\n\n".join(f"{header}\n{'='*40}\n{content}" for header, content in briefings.items())
+        combined_content = "\n\n".join(
+            f"## {header.title()}\n---\n{content}"  # Replace === with ---
+            for header, content in briefings.items()
+        )
         
         prompt = f"""You are creating a comprehensive research report about {company} in the {industry} industry (HQ:{hq}).
 The following contains bullet-point information for various sections:
 
 {combined_content}
 
-Create a well-structured final report that:
+Create a well-structured, detailed final report that:
 1. Maintains the distinct sections with their original headers
 2. Removes redundant or repetitive points between sections (critical!)
 3. Maintains factual, concise language throughout
@@ -49,12 +52,19 @@ Create a well-structured final report that:
 
 Format Requirements:
 - Do not add any introductions or conclusions
+- Do not mention if information wasn't found in the documents
 - Do not add transitional text between sections
 - Ensure information is current as of {datetime.now().strftime("%Y-%m-%d")}
 
 Return only the formatted report. No explanation."""
 
         try:
+            await state.get('websocket_manager').send_status_update(
+                job_id=state.get('job_id'),
+                status="processing",
+                message="Compiling the final research report",
+                result={"step": "Editor"}
+            )
             response = await self.llm.ainvoke(prompt)
             final_report = response.content.strip()
             
@@ -63,10 +73,13 @@ Return only the formatted report. No explanation."""
                 return ""
 
             # Format references
-            reference_lines = ["\n\n📚 References\n" + "="*40 + "\n"]
+            reference_lines = [
+                "\n\n## References\n---\n"  # Match the format of other sections
+            ]
             references = state.get('references', [])
             for ref in references:
-                reference_lines.append(f"• {ref}")
+                # Format as markdown link - URL is both the text and the link
+                reference_lines.append(f"• [{ref}]({ref})")
                 
             final_report += "\n".join(reference_lines)
             logger.info(f"Final report compiled with {len(final_report)} characters")

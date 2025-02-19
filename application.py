@@ -113,7 +113,7 @@ async def process_research(job_id: str, data: ResearchRequest):
             job_id,
             status="processing",
             message=f"Starting research for {data.company}",
-            result={"step": "initialization"}  # Add result object
+            result={"step": "Initializing..."}  # Add result object
         )
         
         # Initialize research graph
@@ -121,7 +121,7 @@ async def process_research(job_id: str, data: ResearchRequest):
             job_id,
             status="processing",
             message="Initializing research graph",
-            result={"step": "graph_initialization"}  # Add result object
+            result={"step": "Graph Intializing..."}  # Add result object
         )
         
         graph = Graph(
