@@ -30,6 +30,19 @@ class FinancialAnalyst(BaseResearcher):
             messages = state.get('messages', [])
             messages.append(AIMessage(content=subqueries_msg))
             state['messages'] = messages
+
+            # Send queries through WebSocket
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Financial analysis queries generated",
+                        result={
+                            "analyst_type": "Financial Analyst",
+                            "queries": queries
+                        }
+                    )
             
             # Process site scrape data
             financial_data = {}
@@ -55,16 +68,40 @@ class FinancialAnalyst(BaseResearcher):
             state['messages'] = messages
             state['financial_data'] = financial_data
 
+            # Send completion status with final queries
+            if websocket_manager and job_id:
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=completion_msg,
+                    result={
+                        "analyst_type": "Financial Analyst",
+                        "queries": queries,
+                        "documents_found": len(financial_data)
+                    }
+                )
+
             return {
                 'message': completion_msg,
                 'financial_data': financial_data,
                 'analyst_type': self.analyst_type,
-                'queries': queries,
-                'financial_queries': queries  # Add financial_queries to the result
+                'queries': queries
             }
 
         except Exception as e:
             error_msg = f"Financial analysis failed: {str(e)}"
+            # Send error status
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="error",
+                        message=error_msg,
+                        result={
+                            "analyst_type": "Financial Analyst",
+                            "error": str(e)
+                        }
+                    )
             raise  # Re-raise to maintain error flow
 
     async def run(self, state: ResearchState) -> Dict[str, Any]:

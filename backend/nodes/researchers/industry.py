@@ -29,6 +29,19 @@ class IndustryAnalyzer(BaseResearcher):
         messages = state.get('messages', [])
         messages.append(AIMessage(content=subqueries_msg))
         state['messages'] = messages
+
+        # Send queries through WebSocket
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Industry analysis queries generated",
+                    result={
+                        "analyst_type": "Industry Analyst",
+                        "queries": queries
+                    }
+                )
         
         industry_data = {}
         

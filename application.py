@@ -108,19 +108,20 @@ async def process_research(job_id: str, data: ResearchRequest):
         # Wait a short time for WebSocket connection to be established
         await asyncio.sleep(1)
         
-        update_job_status(job_id, status="processing", message=f"Starting research for {data.company}")
+        # First status update
         await manager.send_status_update(
             job_id,
             status="processing",
-            message=f"Starting research for {data.company}"
+            message=f"Starting research for {data.company}",
+            result={"step": "initialization"}  # Add result object
         )
         
         # Initialize research graph
-        update_job_status(job_id, message="Initializing research graph")
         await manager.send_status_update(
             job_id,
             status="processing",
-            message="Initializing research graph"
+            message="Initializing research graph",
+            result={"step": "graph_initialization"}  # Add result object
         )
         
         graph = Graph(

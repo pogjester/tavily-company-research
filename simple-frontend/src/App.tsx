@@ -41,23 +41,32 @@ function App() {
     };
 
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("WebSocket message:", data);
+      const rawData = JSON.parse(event.data);
+      console.log("WebSocket message received:", rawData);
 
-      if (data.status === "completed") {
-        setIsResearching(false);
-        setOutput({
-          summary: "Research completed",
-          details: data.result,
-        });
-      } else if (data.status === "failed") {
-        setIsResearching(false);
-        setError(data.error || "Research failed");
-      } else {
-        setStatus({
-          step: data.status,
-          message: data.message || "Processing...",
-        });
+      if (rawData.type === "status_update") {
+        const statusData = rawData.data;
+
+        if (statusData.status === "processing") {
+          console.log("Updating status with:", {
+            step: statusData.result?.step || "Processing",
+            message: statusData.message,
+          });
+
+          setStatus({
+            step: statusData.result?.step || "Processing",
+            message: statusData.message || "Processing...",
+          });
+        } else if (statusData.status === "completed") {
+          setIsResearching(false);
+          setOutput({
+            summary: "Research completed",
+            details: statusData.result,
+          });
+        } else if (statusData.status === "failed") {
+          setIsResearching(false);
+          setError(statusData.error || "Research failed");
+        }
       }
     };
 
@@ -281,13 +290,17 @@ function App() {
             <h2 className="text-lg font-semibold text-white mb-4">
               Research Status
             </h2>
-            <div className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                <Loader2 className="animate-spin h-5 w-5 text-blue-400" />
-              </div>
-              <div>
-                <p className="font-medium text-white">{status.step}</p>
-                <p className="text-sm text-gray-400">{status.message}</p>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  <Loader2 className="animate-spin h-5 w-5 text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-white">{status.step}</p>
+                  <p className="text-sm text-gray-400 whitespace-pre-wrap">
+                    {status.message}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
