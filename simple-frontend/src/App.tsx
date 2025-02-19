@@ -6,6 +6,7 @@ import {
   Factory,
   Search,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -33,6 +34,7 @@ function App() {
   const [output, setOutput] = useState<ResearchOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const [isComplete, setIsComplete] = useState(false);
 
   const connectWebSocket = (jobId: string) => {
     const ws = new WebSocket(`ws://localhost:8000/research/ws/${jobId}`);
@@ -49,6 +51,7 @@ function App() {
         const statusData = rawData.data;
 
         if (statusData.status === "processing") {
+          setIsComplete(false);
           console.log("Updating status with:", {
             step: statusData.result?.step || "Processing",
             message: statusData.message,
@@ -59,6 +62,7 @@ function App() {
             message: statusData.message || "Processing...",
           });
         } else if (statusData.status === "completed") {
+          setIsComplete(true);
           setIsResearching(false);
           setOutput({
             summary: "Research completed",
@@ -138,7 +142,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-6">
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white mb-2">
@@ -296,7 +300,11 @@ function App() {
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <div className="flex-shrink-0">
-                  <Loader2 className="animate-spin h-5 w-5 text-blue-400" />
+                  {isComplete ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-400" />
+                  ) : (
+                    <Loader2 className="animate-spin h-5 w-5 text-blue-400" />
+                  )}
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-white">{status.step}</p>
@@ -315,10 +323,25 @@ function App() {
             <h2 className="text-lg font-semibold text-white mb-4">
               Research Results
             </h2>
-            <div className="prose prose-invert prose-sm max-w-none">
+            <div className="prose prose-invert prose-lg max-w-none">
               <p className="text-gray-300">{output.summary}</p>
-              <div className="mt-4 bg-gray-800/50 p-4 rounded-lg overflow-x-auto border border-gray-700">
-                <ReactMarkdown className="text-gray-300">
+              <div className="mt-4 bg-gray-800/50 p-6 rounded-lg overflow-x-auto border border-gray-700">
+                <ReactMarkdown
+                  className="text-gray-300 prose-ul:list-disc prose-li:ml-4"
+                  components={{
+                    ul: ({ children }) => (
+                      <ul className="list-disc space-y-1 ml-4">{children}</ul>
+                    ),
+                    li: ({ children }) => (
+                      <li className="text-gray-300">{children}</li>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 className="text-xl font-semibold text-white mt-8 mb-4">
+                        {children}
+                      </h2>
+                    ),
+                  }}
+                >
                   {output.details.report || "No report available"}
                 </ReactMarkdown>
               </div>
