@@ -52,11 +52,6 @@ function App() {
 
         if (statusData.status === "processing") {
           setIsComplete(false);
-          console.log("Updating status with:", {
-            step: statusData.result?.step || "Processing",
-            message: statusData.message,
-          });
-
           setStatus({
             step: statusData.result?.step || "Processing",
             message: statusData.message || "Processing...",
@@ -70,9 +65,13 @@ function App() {
               report: statusData.result.report,
             },
           });
-        } else if (statusData.status === "failed") {
-          setIsResearching(false);
+        } else if (
+          statusData.status === "failed" ||
+          statusData.status === "error"
+        ) {
           setError(statusData.error || "Research failed");
+          setIsResearching(false);
+          setIsComplete(false);
         }
       }
     };
