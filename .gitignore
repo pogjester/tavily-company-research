@@ -1,0 +1,27 @@
+# Environment and secrets
+.env
+reports/*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual Environment
+.venv/
+
+# IDE and OS
+.vscode/
+.DS_Store
+
+# Frontend
+node_modules/
+
+# LangGraph
+.langgraph/
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+Procfile
