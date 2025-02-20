@@ -18,7 +18,7 @@ class Editor:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
             
         self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
+            model_name="gpt-4o",
             temperature=0,
             max_tokens=4096,
             api_key=openai_key,
@@ -46,13 +46,12 @@ The following contains bullet-point information for various sections:
 
 Create a well-structured, detailed final report that:
 1. Maintains the distinct sections with their original headers
-2. Removes redundant or repetitive points between sections (critical!)
+2. Eliminates repetition (critical!)
 3. Maintains factual, concise language throughout
 4. Eliminates any points that are not relevant to {company} in the {industry} industry
 
 Format Requirements:
 - Do not add any introductions or conclusions
-- Do not mention if information wasn't found in the documents
 - Do not add transitional text between sections
 - Ensure information is current as of {datetime.now().strftime("%Y-%m-%d")}
 

@@ -1,5 +1,6 @@
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
+from google import genai
 from typing import Dict, Any, Union, List
 import os
 import logging
@@ -16,12 +17,16 @@ class Briefing:
         if not openai_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
         self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
+            model_name="gpt-4o",
             temperature=0,
             max_tokens=4096,
             api_key=openai_key
         )
         self.max_doc_length = 8000  # Maximum document content length
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        if not self.gemini_key:
+            raise ValueError("GEMINI_API_KEY environment variable is not set")
+        self.gemini_client = genai.GenerativeModel(self.gemini_key)
 
     async def generate_category_briefing(
         self, docs: Union[Dict[str, Any], List[Dict[str, Any]]], 
@@ -33,7 +38,7 @@ class Briefing:
 
         prompts = {
             'financial': f"""You are analyzing financial information about {company} in the {industry} industry.
-Based on the provided documents, create a concise financialbriefing covering key financial metrics, market valuation, funding status, and notable developments. Don't provide any generic information about the industry or the company. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, don't mention it at all.
+Based on the provided documents, create a concise financial briefing covering key financial metrics, market valuation, funding status, and notable developments. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, don't mention it at all.
 Format your response as bullet points without introductions or conclusions.""",
             'news': f"""You are analyzing recent news about {company} in the {industry} industry.
 Based on the provided documents, create a recent news summary covering major developments, key announcements, partnerships, and public perception. Don't provide any basic descriptions of the company.
@@ -81,7 +86,8 @@ Create a set of bullet points with factual, verifiable information without intro
         
         try:
             logger.info("Sending prompt to LLM")
-            response = await self.llm.ainvoke(prompt)
+            # response = await self.llm.ainvoke(prompt)
+            response=self.gemini_client.generate_content( model="gemini-2.0-flash",contents=prompt)
             content = response.content.strip()
             if not content:
                 logger.error(f"Empty response from LLM for {category} briefing")

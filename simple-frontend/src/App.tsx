@@ -22,14 +22,29 @@ type ResearchOutput = {
 
 console.log("=== DIRECT CONSOLE TEST ===");
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL;
+const WS_URL = import.meta.env.VITE_WS_URL;
+
+if (!API_URL || !WS_URL) {
+  throw new Error(
+    "Environment variables VITE_API_URL and VITE_WS_URL must be set"
+  );
+}
 
 // Log environment variables immediately
 console.log({
   mode: import.meta.env.MODE,
   api_url: API_URL,
   ws_url: WS_URL,
+});
+
+// Add this near your other console.logs
+console.log("Environment:", {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_WS_URL: import.meta.env.VITE_WS_URL,
+  MODE: import.meta.env.MODE,
+  DEV: import.meta.env.DEV,
+  PROD: import.meta.env.PROD,
 });
 
 // Add a window load event
@@ -129,13 +144,15 @@ function App() {
     setIsResearching(true);
 
     try {
-      console.log("Attempting fetch to:", `${API_URL}/research`);
+      const url = `${API_URL}/research`;
+      console.log("Attempting fetch to:", url);
 
-      const response = await fetch(`${API_URL}/research`, {
+      const response = await fetch(url, {
         method: "POST",
-        mode: "cors", // Keep this
-        credentials: "omit", // Changed from 'include' to 'omit'
+        mode: "cors",
+        credentials: "omit",
         headers: {
+          Accept: "application/json",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -146,7 +163,7 @@ function App() {
         }),
       });
 
-      console.log("Fetch response received:", response.status);
+      console.log("Response status:", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
