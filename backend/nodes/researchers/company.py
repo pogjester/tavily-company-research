@@ -37,6 +37,7 @@ class CompanyAnalyzer(BaseResearcher):
                     status="processing",
                     message=f"Company analysis queries generated",
                     result={
+                        "step": "Company Analyst",
                         "analyst_type": "Company Analyst",
                         "queries": queries
                     }

@@ -39,6 +39,7 @@ class FinancialAnalyst(BaseResearcher):
                         status="processing",
                         message=f"Financial analysis queries generated",
                         result={
+                            "step": "Financial Analyst",
                             "analyst_type": "Financial Analyst",
                             "queries": queries
                         }

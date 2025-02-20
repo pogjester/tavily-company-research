@@ -1,5 +1,5 @@
 from typing import TypedDict, NotRequired, Required, Dict, List, Any
-from backend.websocket_manager import WebSocketManager
+from backend.services.websocket_manager import WebSocketManager
 
 #Define the input state
 class InputState(TypedDict, total=False):

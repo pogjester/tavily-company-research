@@ -38,6 +38,7 @@ class IndustryAnalyzer(BaseResearcher):
                     status="processing",
                     message=f"Industry analysis queries generated",
                     result={
+                        "step": "Industry Analyst",
                         "analyst_type": "Industry Analyst",
                         "queries": queries
                     }

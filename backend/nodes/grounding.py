@@ -13,54 +13,46 @@ class GroundingNode:
     def __init__(self) -> None:
         self.tavily_client = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
-    async def _send_update(self, state: InputState, message: str, status: str, data: dict = None):
-        """Send a status update through websocket if available"""
+    async def initial_search(self, state: InputState) -> ResearchState:
+        # Add debug logging at the start to check websocket manager
+        if websocket_manager := state.get('websocket_manager'):
+            logger.info("Websocket manager found in state")
+        else:
+            logger.warning("No websocket manager found in state")
+        
+        company = state.get('company', 'Unknown Company')
+        msg = f"🎯 Initiating research for {company}...\n"
+        
         if websocket_manager := state.get('websocket_manager'):
             if job_id := state.get('job_id'):
                 await websocket_manager.send_status_update(
                     job_id=job_id,
-                    status=status,
-                    message=message,
-                    result=data
+                    status="processing",
+                    message=f"🎯 Initiating research for {company}",
+                    result={"step": "Initializing"}
                 )
-        logger.info(f"Grounding update - {status}: {message}")
-
-    async def initial_search(self, state: InputState) -> ResearchState:
-        company = state.get('company', 'Unknown Company')
-        msg = f"🎯 Initiating research for {company}...\n"
-        
-        await self._send_update(
-            state,
-            f"Starting research for {company}",
-            "research_start",
-            {"company": company}
-        )
-
-        # Add search status update
-        await self._send_update(
-            state,
-            f"Searching for information about {company}",
-            "search_start",
-            {
-                "step": "Search",
-                "company": company
-            }
-        )
 
         site_scrape = {}
 
         # Only attempt extraction if we have a URL
         if url := state.get('company_url'):
             msg += f"\n🌐 Analyzing company website: {url}"
-            await self._send_update(
-                state,
-                f"Analyzing company website: {url}",
-                "site_scrape_start",
-                {"url": url}
-            )
+            logger.info(f"Starting website analysis for {url}")
+            
+            # Send initial briefing status
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message="🌐 Analyzing company website",
+                        result={"step": "Initial Site Scrape"}
+                    )
 
             try:
+                logger.info("Initiating Tavily extraction")
                 site_extraction = await self.tavily_client.extract(url, extract_depth="basic")
+                
                 raw_contents = []
                 for item in site_extraction.get("results", []):
                     if content := item.get("raw_content"):
@@ -71,42 +63,50 @@ class GroundingNode:
                         'title': company,
                         'raw_content': "\n\n".join(raw_contents)
                     }
+                    logger.info(f"Successfully extracted {len(raw_contents)} content sections")
                     msg += f"\n✅ Successfully extracted content from website"
-                    await self._send_update(
-                        state,
-                        "Successfully extracted website content",
-                        "site_scrape_complete",
-                        {
-                            "url": url,
-                            "content_length": len(site_scrape['raw_content'])
-                        }
-                    )
+                    if websocket_manager := state.get('websocket_manager'):
+                        if job_id := state.get('job_id'):
+                            await websocket_manager.send_status_update(
+                                job_id=job_id,
+                                status="processing",
+                                message="✅ Successfully extracted content from website",
+                                result={"step": "Initial Site Scrape"}
+                            )
                 else:
+                    logger.warning("No content found in extraction results")
                     msg += f"\n⚠️ No content found in website extraction"
-                    await self._send_update(
-                        state,
-                        "No content found in website extraction",
-                        "site_scrape_error",
-                        {"error": "No content found in extraction results"}
-                    )
+                    if websocket_manager := state.get('websocket_manager'):
+                        if job_id := state.get('job_id'):
+                            await websocket_manager.send_status_update(
+                                job_id=job_id,
+                                status="processing",
+                                message="⚠️ No content found in provided URL",
+                                result={"step": "Initial Site Scrape"}
+                            )
             except Exception as e:
+                logger.error(f"Website extraction error: {str(e)}", exc_info=True)
                 error_msg = f"⚠️ Error extracting website content: {str(e)}"
                 print(error_msg)
                 msg += f"\n{error_msg}"
-                await self._send_update(
-                    state,
-                    error_msg,
-                    "site_scrape_error",
-                    {"error": str(e)}
-                )
+                if websocket_manager := state.get('websocket_manager'):
+                    if job_id := state.get('job_id'):
+                        await websocket_manager.send_status_update(
+                            job_id=job_id,
+                            status="failed",
+                            message="⚠️ Error extracting website content",
+                            result={"step": "Initial Site Scrape"}
+                        )
         else:
             msg += "\n⏩ No company URL provided, proceeding directly to research phase"
-            await self._send_update(
-                state,
-                "No company URL provided",
-                "site_scrape_skip"
-            )
-
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message="⏩ No company URL provided, proceeding directly to research phase",
+                        result={"step": "Initializing"}
+                    )
         # Add context about what information we have
         context_data = {}
         if hq := state.get('hq_location'):
@@ -115,14 +115,6 @@ class GroundingNode:
         if industry := state.get('industry'):
             msg += f"\n🏭 Industry: {industry}"
             context_data["industry"] = industry
-
-        if context_data:
-            await self._send_update(
-                state,
-                "Additional context gathered",
-                "context_complete",
-                context_data
-            )
         
         # Initialize ResearchState with input information
         research_state = {
@@ -138,23 +130,6 @@ class GroundingNode:
             "websocket_manager": state.get('websocket_manager'),
             "job_id": state.get('job_id')
         }
-
-        await self._send_update(
-            state,
-            f"Completed initial search for {company}",
-            "search_complete",
-            {
-                "step": "Search",
-                "company": company
-            }
-        )
-
-        await self._send_update(
-            state,
-            "Grounding phase complete",
-            "grounding_complete",
-            {"state_keys": list(research_state.keys())}
-        )
 
         return research_state
 

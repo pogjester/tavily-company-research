@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from backend.graph import Graph
 from backend.utils.utils import generate_pdf_from_md
-from backend.websocket_manager import WebSocketManager
+from backend.services.websocket_manager import WebSocketManager
 from dotenv import load_dotenv
 import logging
 import os

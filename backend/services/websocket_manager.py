@@ -42,8 +42,6 @@ class WebSocketManager:
         
         # Convert message to JSON string
         message_str = json.dumps(message)
-        logger.info(f"Broadcasting message for job {job_id}")
-        logger.info(f"Active connections for job: {len(self.active_connections[job_id])}")
         logger.info(f"Message content: {message_str}")
         
         # Send to all connected clients for this job
@@ -72,7 +70,6 @@ class WebSocketManager:
                 "result": result
             }
         }
-        logger.info(f"Preparing status update for job {job_id}")
         logger.info(f"Status: {status}, Message: {message}")
         await self.broadcast_to_job(job_id, update)
         

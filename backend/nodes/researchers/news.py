@@ -68,6 +68,7 @@ class NewsScanner(BaseResearcher):
                     status="processing",
                     message=f"News scanner queries generated",
                     result={
+                        "step": "News Scanner",
                         "analyst_type": "News Scanner",
                         "queries": queries
                     }
