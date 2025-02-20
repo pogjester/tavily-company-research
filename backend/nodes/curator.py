@@ -72,31 +72,36 @@ class Curator:
         try:
             # Evaluate each document with its specific query
             for doc, formatted_doc in zip(valid_docs, documents):
-                specific_query = doc.get('query', '')  # Use the specific query for this document
-                print(f"\nEvaluating document with query: {specific_query}")
-                response = self.co.rerank(
-                    model='rerank-v3.5',
-                    query=specific_query,
-                    documents=[formatted_doc],
-                    top_n=1
-                )
+                tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
+                if tavily_score >= 0.2:
+                    specific_query = doc.get('query', '')  # Use the specific query for this document
+                    print(f"\nEvaluating document with query: {specific_query} (Tavily score: {tavily_score:.3f})")
+                    response = self.co.rerank(
+                        model='rerank-v3.5',
+                        query=specific_query,
+                        documents=[formatted_doc],
+                        top_n=1
+                    )
 
-                # Attach relevance scores to documents
-                for result in response.results:
-                    score = result.relevance_score
-                    print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
+                    # Attach relevance scores to documents
+                    for result in response.results:
+                        score = result.relevance_score
+                        print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
 
-                    # Only keep documents with good relevance
-                    if score >= 0.3:
-                        evaluated_doc = {
-                            **doc,
-                            "evaluation": {
-                                "overall_score": score,
-                                "query": specific_query,
-                                "formatted_content": formatted_doc
+                        # Only keep documents with good relevance
+                        if score >= 0.6:
+                            evaluated_doc = {
+                                **doc,
+                                "evaluation": {
+                                    "overall_score": score,
+                                    "tavily_score": tavily_score,
+                                    "query": specific_query,
+                                    "formatted_content": formatted_doc
+                                }
                             }
-                        }
-                        evaluated_docs.append(evaluated_doc)
+                            evaluated_docs.append(evaluated_doc)
+                else:
+                    print(f"Skipping document with low Tavily score ({tavily_score:.3f}): {doc.get('title', 'No title')}")
         except Exception as e:
             print(f"Error during document evaluation: {e}")
             return []
@@ -106,6 +111,17 @@ class Curator:
     async def curate_data(self, state: ResearchState) -> ResearchState:
         """Curate all collected data based on relevance scores."""
         company = state.get('company', 'Unknown Company')
+        
+        # Send initial status update through WebSocket
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Curating research data for {company}",
+                    result={"step": "Curation"}
+                )
+
         industry = state.get('industry', 'Unknown')
         context = {
             "company": company,
@@ -145,6 +161,20 @@ class Curator:
         all_top_references = []  # Keep track of all top references with scores
         for data_field, source_type, urls, docs in curation_tasks:
             msg.append(f"\n{data_types[data_field]}: Found {len(docs)} documents")
+
+            # Send progress update
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Evaluating {data_types[data_field]} documents",
+                        result={
+                            "step": "Curation",
+                            "substep": data_field,
+                            "total_docs": len(docs)
+                        }
+                    )
 
             # Evaluate documents based on content
             evaluated_docs = await self.evaluate_documents(docs, context)

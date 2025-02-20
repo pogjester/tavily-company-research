@@ -2,12 +2,14 @@ from langchain_core.messages import AIMessage
 from tavily import AsyncTavilyClient
 import os
 import logging
-
+from typing import Dict, Any, List
 from ..classes import InputState, ResearchState
 
 logger = logging.getLogger(__name__)
 
 class GroundingNode:
+    """Gathers initial grounding data about the company."""
+    
     def __init__(self) -> None:
         self.tavily_client = AsyncTavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
@@ -32,6 +34,17 @@ class GroundingNode:
             f"Starting research for {company}",
             "research_start",
             {"company": company}
+        )
+
+        # Add search status update
+        await self._send_update(
+            state,
+            f"Searching for information about {company}",
+            "search_start",
+            {
+                "step": "Search",
+                "company": company
+            }
         )
 
         site_scrape = {}
@@ -125,6 +138,16 @@ class GroundingNode:
             "websocket_manager": state.get('websocket_manager'),
             "job_id": state.get('job_id')
         }
+
+        await self._send_update(
+            state,
+            f"Completed initial search for {company}",
+            "search_complete",
+            {
+                "step": "Search",
+                "company": company
+            }
+        )
 
         await self._send_update(
             state,

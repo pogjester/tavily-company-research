@@ -2,13 +2,20 @@ from pymongo import MongoClient
 from datetime import datetime
 from typing import Dict, Any, Optional
 import os
+import certifi
 
 class MongoDBService:
-    def __init__(self, connection_string: str):
-        self.client = MongoClient(connection_string)
-        self.db = self.client.tavily_research  # Fixed database name
+    def __init__(self, uri: str):
+        # Use certifi for SSL certificate verification with updated options
+        self.client = MongoClient(
+            uri,
+            tlsCAFile=certifi.where(),
+            retryWrites=True,
+            w='majority'
+        )
+        self.db = self.client.get_database('tavily_research')
         self.jobs = self.db.jobs
-        self.reports = self.db.reports  # Fix: was self.reports
+        self.reports = self.db.reports
 
     def create_job(self, job_id: str, inputs: Dict[str, Any]) -> None:
         """Create a new research job record."""

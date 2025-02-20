@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from google import genai
+import google.generativeai as genai
 from typing import Dict, Any, Union, List
 import os
 import logging
@@ -13,20 +13,23 @@ class Briefing:
     """Creates briefings for each research category and updates the ResearchState."""
     
     def __init__(self) -> None:
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.llm = ChatOpenAI(
-            model_name="gpt-4o",
-            temperature=0,
-            max_tokens=4096,
-            api_key=openai_key
-        )
+        # openai_key = os.getenv("OPENAI_API_KEY")
+        # if not openai_key:
+        #     raise ValueError("OPENAI_API_KEY environment variable is not set")
+        # self.llm = ChatOpenAI(
+        #     model_name="gpt-4o",
+        #     temperature=0,
+        #     max_tokens=4096,
+        #     api_key=openai_key
+        # )
         self.max_doc_length = 8000  # Maximum document content length
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         if not self.gemini_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
-        self.gemini_client = genai.GenerativeModel(self.gemini_key)
+        
+        # Configure Gemini
+        genai.configure(api_key=self.gemini_key)
+        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
 
     async def generate_category_briefing(
         self, docs: Union[Dict[str, Any], List[Dict[str, Any]]], 
@@ -35,6 +38,20 @@ class Briefing:
         company = context.get('company', 'Unknown')
         industry = context.get('industry', 'Unknown')
         logger.info(f"Generating {category} briefing for {company} using {len(docs)} documents")
+
+        # Send category start status
+        if websocket_manager := context.get('websocket_manager'):
+            if job_id := context.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Generating {category} briefing",
+                    result={
+                        "step": "Briefing",
+                        "substep": category,
+                        "total_docs": len(docs)
+                    }
+                )
 
         prompts = {
             'financial': f"""You are analyzing financial information about {company} in the {industry} industry.
@@ -86,9 +103,8 @@ Create a set of bullet points with factual, verifiable information without intro
         
         try:
             logger.info("Sending prompt to LLM")
-            # response = await self.llm.ainvoke(prompt)
-            response=self.gemini_client.generate_content( model="gemini-2.0-flash",contents=prompt)
-            content = response.content.strip()
+            response = self.gemini_model.generate_content(prompt)
+            content = response.text.strip()
             if not content:
                 logger.error(f"Empty response from LLM for {category} briefing")
                 return {'content': ''}
@@ -106,14 +122,16 @@ Create a set of bullet points with factual, verifiable information without intro
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="processing",
-                    message="Preparing research briefings",
+                    message="Starting research briefings",
                     result={"step": "Briefing"}
                 )
 
         context = {
             "company": company,
             "industry": state.get('industry', 'Unknown'),
-            "hq_location": state.get('hq_location', 'Unknown')
+            "hq_location": state.get('hq_location', 'Unknown'),
+            "websocket_manager": state.get('websocket_manager'),  # Pass WebSocket manager
+            "job_id": state.get('job_id')  # Pass job ID
         }
         logger.info(f"Creating section briefings for {company}")
         

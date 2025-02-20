@@ -1,6 +1,7 @@
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 from typing import Dict, Any
+import google.generativeai as genai
 from datetime import datetime
 import os
 import logging
@@ -13,92 +14,41 @@ class Editor:
     """Compiles individual section briefings into a cohesive final report."""
     
     def __init__(self) -> None:
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
+        # openai_key = os.getenv("OPENAI_API_KEY")
+        # if not openai_key:
+        #     raise ValueError("OPENAI_API_KEY environment variable is not set")
             
-        self.llm = ChatOpenAI(
-            model_name="gpt-4o",
-            temperature=0,
-            max_tokens=4096,
-            api_key=openai_key,
-        )
-
-    async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
-        """Compile section briefings into a final report and update the state."""
-        company = context.get('company', 'Unknown')
-        industry = context.get('industry', 'Unknown')
-        hq = context.get('hq_location', 'Unknown')
+        # self.llm = ChatOpenAI(
+        #     model_name="gpt-4o",
+        #     temperature=0,
+        #     max_tokens=4096,
+        #     api_key=openai_key,
+        # )
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        if not self.gemini_key:
+            raise ValueError("GEMINI_API_KEY environment variable is not set")
         
-        logger.info(f"Starting report compilation for {company}")
-        logger.info(f"Available briefing sections: {list(briefings.keys())}")
-        
-        # Combine all briefings into a single content block
-        combined_content = "\n\n".join(
-            f"## {header.title()}\n---\n{content}"  # Replace === with ---
-            for header, content in briefings.items()
-        )
-        
-        prompt = f"""You are creating a comprehensive research report about {company} in the {industry} industry (HQ:{hq}).
-The following contains bullet-point information for various sections:
-
-{combined_content}
-
-Create a well-structured, detailed final report that:
-1. Maintains the distinct sections with their original headers
-2. Eliminates repetition (critical!)
-3. Maintains factual, concise language throughout
-4. Eliminates any points that are not relevant to {company} in the {industry} industry
-
-Format Requirements:
-- Do not add any introductions or conclusions
-- Do not add transitional text between sections
-- Ensure information is current as of {datetime.now().strftime("%Y-%m-%d")}
-
-Return only the formatted report. No explanation."""
-
-        try:
-            await state.get('websocket_manager').send_status_update(
-                job_id=state.get('job_id'),
-                status="processing",
-                message="Compiling the final research report",
-                result={"step": "Editor"}
-            )
-            response = await self.llm.ainvoke(prompt)
-            final_report = response.content.strip()
-            
-            if not final_report:
-                logger.error("No content generated from briefings")
-                return ""
-
-            # Format references
-            reference_lines = [
-                "\n\n## References\n---\n"  # Match the format of other sections
-            ]
-            references = state.get('references', [])
-            for ref in references:
-                # Format as markdown link - URL is both the text and the link
-                reference_lines.append(f"• [{ref}]({ref})")
-                
-            final_report += "\n".join(reference_lines)
-            logger.info(f"Final report compiled with {len(final_report)} characters")
-            
-            # Log a preview of the report
-            logger.info("Final report preview:")
-            logger.info(final_report[:500])
-            
-            # Update state with the final report
-            state['report'] = final_report
-            
-            return final_report
-            
-        except Exception as e:
-            logger.error(f"Error generating final report: {e}")
-            return ""
+        # Configure Gemini
+        genai.configure(api_key=self.gemini_key)
+        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
         """Compile individual briefing categories from state into a final report."""
         company = state.get('company', 'Unknown Company')
+        
+        # Send initial compilation status
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Starting report compilation for {company}",
+                    result={
+                        "step": "Editor",
+                        "substep": "initialization"
+                    }
+                )
+
         context = {
             "company": company,
             "industry": state.get('industry', 'Unknown'),
@@ -114,6 +64,20 @@ Return only the formatted report. No explanation."""
             'financial': 'financial_briefing',
             'news': 'news_briefing'
         }
+
+        # Send briefing collection status
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message="Collecting section briefings",
+                    result={
+                        "step": "Editor",
+                        "substep": "collecting_briefings"
+                    }
+                )
+
         individual_briefings = {}
         for category, key in briefing_keys.items():
             if content := state.get(key):
@@ -147,6 +111,92 @@ Return only the formatted report. No explanation."""
         state.setdefault('messages', []).append(AIMessage(content="\n".join(msg)))
   
         return state
+    
+    async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
+        """Compile section briefings into a final report and update the state."""
+        company = context.get('company', 'Unknown')
+        industry = context.get('industry', 'Unknown')
+        hq = context.get('hq_location', 'Unknown')
+        
+        logger.info(f"Starting report compilation for {company}")
+        logger.info(f"Available briefing sections: {list(briefings.keys())}")
+        
+        # Send editing start status
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message=f"Editing report for {company}",
+                    result={
+                        "step": "Editor",
+                        "substep": "editing",
+                        "sections": list(briefings.keys())
+                    }
+                )
+
+        # First compile sections
+        combined_content = "\n\n".join(
+            f"## {header.title()}\n---\n{content}"
+            for header, content in briefings.items()
+        )
+        
+        # Then deduplicate
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="processing",
+                    message="Removing duplicate information",
+                    result={
+                        "step": "Editor",
+                        "substep": "deduplication"
+                    }
+                )
+        
+        final_report = await self.deduplicate_content(combined_content, company)
+        
+        # Add references
+        if references := state.get('references', []):
+            reference_lines = ["\n\n## References\n---\n"]
+            for ref in references:
+                reference_lines.append(f"• [{ref}]({ref})")
+            final_report += "\n".join(reference_lines)
+        
+        logger.info(f"Final report compiled with {len(final_report)} characters")
+        
+        # Log a preview of the report
+        logger.info("Final report preview:")
+        logger.info(final_report[:500])
+        
+        # Update state with the final report
+        state['report'] = final_report
+        
+        return final_report
+
+    async def deduplicate_content(self, content: str, company: str) -> str:
+        """Remove repetitive information from the report."""
+        
+        prompt = f"""You are cleaning up a research report about {company}. The report has some repeated information across sections.
+
+Original report:
+{content}
+
+Create a new version that:
+1. Removes all duplicate information, keeping only the most detailed/relevant instance
+2. Maintains all unique information
+3. Keeps the original section structure and headers
+4. Preserves the bullet-point format
+5. Does not add any new text or transitions
+
+Return only the deduplicated report. No explanations."""
+
+        try:
+            response = self.gemini_model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            logger.error(f"Error deduplicating report: {e}")
+            return content  # Return original content if deduplication fails
 
     async def run(self, state: ResearchState) -> ResearchState:
         return await self.compile_briefings(state)

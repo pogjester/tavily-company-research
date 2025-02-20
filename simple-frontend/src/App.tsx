@@ -147,6 +147,15 @@ function App() {
       const url = `${API_URL}/research`;
       console.log("Attempting fetch to:", url);
 
+      // Log the request details
+      const requestData = {
+        company: formData.companyName,
+        company_url: formData.companyUrl || undefined,
+        industry: formData.companyIndustry || undefined,
+        hq_location: formData.companyHq || undefined,
+      };
+      console.log("Request data:", requestData);
+
       const response = await fetch(url, {
         method: "POST",
         mode: "cors",
@@ -155,19 +164,21 @@ function App() {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          company: formData.companyName,
-          company_url: formData.companyUrl || undefined,
-          industry: formData.companyIndustry || undefined,
-          hq_location: formData.companyHq || undefined,
-        }),
+        body: JSON.stringify(requestData),
+      }).catch((error) => {
+        console.error("Fetch error:", error);
+        throw error;
       });
 
-      console.log("Response status:", response.status);
+      console.log("Response received:", {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText,
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("Error text:", errorText);
+        console.log("Error response:", errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 

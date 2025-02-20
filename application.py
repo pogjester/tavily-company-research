@@ -32,11 +32,15 @@ app = FastAPI(title="Tavily Company Research API")
 # Enable CORS - Explicitly allow frontend origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174", "http://localhost:5173"],  # Adjust if needed
+    allow_origins=[
+        "http://localhost:5174",
+        "http://localhost:5173",
+        "https://tavily-company-research-65wtjfqzu-pogjesters-projects.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-    expose_headers=["Content-Type"]
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 @app.on_event("startup")
