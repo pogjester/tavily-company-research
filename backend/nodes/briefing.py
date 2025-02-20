@@ -99,7 +99,7 @@ Format your response as bullet points without introductions or conclusions."""
 Analyze the following documents and extract key information about {company} in the {industry} industry:
 {separator}{separator.join(doc_texts)}{separator}
 
-Create a set of bullet points with factual, verifiable information without introductions or conclusions."""
+Create a concise briefing with factual, verifiable information without introductions or conclusions. Avoid using the company name repeatedly."""
         
         try:
             logger.info("Sending prompt to LLM")

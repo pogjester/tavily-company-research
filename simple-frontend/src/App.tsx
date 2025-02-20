@@ -20,6 +20,20 @@ type ResearchOutput = {
   details: Record<string, any>;
 };
 
+// Add new types for query updates
+type Query = {
+  text: string;
+  number: number;
+  category: string;
+};
+
+type ResearchState = {
+  status: string;
+  message: string;
+  queries: Query[];
+  // ... other existing state properties
+};
+
 console.log("=== DIRECT CONSOLE TEST ===");
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -72,6 +86,20 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [researchState, setResearchState] = useState<ResearchState>({
+    status: "idle",
+    message: "",
+    queries: [],
+    // ... other state
+  });
+
+  // Add ref for status section
+  const statusRef = useRef<HTMLDivElement>(null);
+
+  // Add scroll helper function
+  const scrollToStatus = () => {
+    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const connectWebSocket = (jobId: string) => {
     const ws = new WebSocket(`${WS_URL}/research/ws/${jobId}`);
@@ -87,12 +115,40 @@ function App() {
       if (rawData.type === "status_update") {
         const statusData = rawData.data;
 
-        if (statusData.status === "processing") {
+        // Handle query updates
+        if (statusData.status === "query_generated") {
+          console.log("Received query update:", statusData.result);
+          setResearchState((prev) => ({
+            ...prev,
+            queries: [
+              ...prev.queries,
+              {
+                text: statusData.result.query,
+                number: statusData.result.query_number,
+                category: statusData.result.category,
+              },
+            ],
+          }));
+        }
+        // Handle report streaming
+        else if (statusData.status === "report_chunk") {
+          setOutput((prev) => ({
+            summary: "Generating report...",
+            details: {
+              report: prev?.details?.report
+                ? prev.details.report + statusData.result.chunk
+                : statusData.result.chunk,
+            },
+          }));
+        }
+        // Handle other status updates
+        else if (statusData.status === "processing") {
           setIsComplete(false);
           setStatus({
             step: statusData.result?.step || "Processing",
             message: statusData.message || "Processing...",
           });
+          scrollToStatus(); // Add scroll on status update
         } else if (statusData.status === "completed") {
           setIsComplete(true);
           setIsResearching(false);
@@ -351,7 +407,7 @@ function App() {
 
         {/* Status Box */}
         {status && (
-          <div className="glass rounded-xl shadow-lg p-6">
+          <div ref={statusRef} className="glass rounded-xl shadow-lg p-6">
             <h2 className="text-lg font-semibold text-white mb-4">
               Research Status
             </h2>
@@ -413,6 +469,88 @@ function App() {
                 >
                   {output.details.report || "No report available"}
                 </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Query Display Section */}
+        {researchState.queries.length > 0 && (
+          <div className="glass rounded-xl shadow-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Generated Research Queries
+            </h2>
+            <div className="grid grid-cols-2 gap-6">
+              {/* Company Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">🏢</span>
+                  Company Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "company_analyzer")
+                  .map((query, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
+                    >
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Industry Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">🏭</span>
+                  Industry Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "industry_analyzer")
+                  .map((query, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
+                    >
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Financial Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">💰</span>
+                  Financial Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "financial_analyzer")
+                  .map((query, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
+                    >
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* News Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">📰</span>
+                  News Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "news_analyzer")
+                  .map((query, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
+                    >
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>

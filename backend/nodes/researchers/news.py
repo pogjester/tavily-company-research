@@ -6,7 +6,7 @@ from .base import BaseResearcher
 class NewsScanner(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
-        self.analyst_type = "news_scanner"  # Add this if not present
+        self.analyst_type = "news_analyzer"
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
@@ -51,6 +51,18 @@ class NewsScanner(BaseResearcher):
                         news_data[url] = doc
             
             msg.append(f"\n✓ Found {len(news_data)} documents")
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Used Tavily Search to find {len(news_data)} documents",
+                        result={
+                            "step": "Search",
+                            "analyst_type": "News Scanner",
+                            "queries": queries
+                        }
+                    )
         except Exception as e:
             msg.append(f"\n⚠️ Error during research: {str(e)}")
         

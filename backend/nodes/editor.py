@@ -1,8 +1,6 @@
 from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 from typing import Dict, Any
 import google.generativeai as genai
-from datetime import datetime
 import os
 import logging
 
@@ -118,45 +116,37 @@ class Editor:
         industry = context.get('industry', 'Unknown')
         hq = context.get('hq_location', 'Unknown')
         
-        logger.info(f"Starting report compilation for {company}")
-        logger.info(f"Available briefing sections: {list(briefings.keys())}")
-        
-        # Send editing start status
+        # Step 1: Initial Compilation
         if websocket_manager := state.get('websocket_manager'):
             if job_id := state.get('job_id'):
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="processing",
-                    message=f"Editing report for {company}",
+                    message="Compiling initial research report",
                     result={
                         "step": "Editor",
-                        "substep": "editing",
-                        "sections": list(briefings.keys())
+                        "substep": "compilation"
                     }
                 )
 
-        # First compile sections
-        combined_content = "\n\n".join(
-            f"## {header.title()}\n---\n{content}"
-            for header, content in briefings.items()
-        )
-        
-        # Then deduplicate
+        initial_report = await self.compile_content(state, briefings, company)
+
+        # Step 2: Deduplication and Cleanup
         if websocket_manager := state.get('websocket_manager'):
             if job_id := state.get('job_id'):
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="processing",
-                    message="Removing duplicate information",
+                    message="Cleaning up and organizing report",
                     result={
                         "step": "Editor",
-                        "substep": "deduplication"
+                        "substep": "cleanup"
                     }
                 )
+
+        final_report = await self.deduplicate_content(state, initial_report, company)
         
-        final_report = await self.deduplicate_content(combined_content, company)
-        
-        # Add references
+        # Add references and finalize
         if references := state.get('references', []):
             reference_lines = ["\n\n## References\n---\n"]
             for ref in references:
@@ -174,29 +164,96 @@ class Editor:
         
         return final_report
 
-    async def deduplicate_content(self, content: str, company: str) -> str:
-        """Remove repetitive information from the report."""
+    async def compile_content(self, state: ResearchState, briefings: Dict[str, str], company: str) -> str:
+        """Initial compilation of research sections."""
         
-        prompt = f"""You are cleaning up a research report about {company}. The report has some repeated information across sections.
+        combined_content = "\n\n".join(
+            f"## {header.title()}\n---\n{content}"
+            for header, content in briefings.items()
+        )
+        
+        prompt = f"""You are compiling a comprehensive research report about {company}.
 
-Original report:
-{content}
+Original section content:
+{combined_content}
 
-Create a new version that:
-1. Removes all duplicate information, keeping only the most detailed/relevant instance
-2. Maintains all unique information
-3. Keeps the original section structure and headers
-4. Preserves the bullet-point format
-5. Does not add any new text or transitions
+Create an initial comprehensive report that:
+1. Integrates information from all sections into a cohesive narrative
+2. Maintains the most important details from each section
+3. Organizes information logically within each section
+4. Uses clear section headers and structure
+5. Preserves all factual information
 
-Return only the deduplicated report. No explanations."""
+Return the compiled report maintaining the markdown format."""
 
         try:
-            response = self.gemini_model.generate_content(prompt)
-            return response.text.strip()
+            response = self.gemini_model.generate_content(prompt, stream=True)
+            
+            accumulated_text = ""
+            async for chunk in response:
+                chunk_text = chunk.text
+                print(chunk.text)
+                accumulated_text += chunk_text
+                
+                if websocket_manager := state.get('websocket_manager'):
+                    if job_id := state.get('job_id'):
+                        await websocket_manager.send_status_update(
+                            job_id=job_id,
+                            status="report_chunk",
+                            message="Compiling initial report",
+                            result={
+                                "chunk": chunk_text,
+                                "step": "Editor"
+                            }
+                        )
+            
+            return accumulated_text.strip()
         except Exception as e:
-            logger.error(f"Error deduplicating report: {e}")
-            return content  # Return original content if deduplication fails
+            logger.error(f"Error in initial compilation: {e}")
+            return combined_content
+
+    async def deduplicate_content(self, state: ResearchState, content: str, company: str) -> str:
+        """Clean up and deduplicate the compiled report."""
+        
+        prompt = f"""You are polishing a research report about {company}.
+
+Current report:
+{content}
+
+Create a refined version that:
+1. Removes any duplicate information
+2. Improves the flow and readability
+3. Ensures consistent formatting and style
+4. Removes sections that don't have any useful content
+5. Maintains all unique insights
+6. Uses clear bullet points for key information
+
+Return the polished report maintaining the markdown format."""
+
+        try:
+            response = self.gemini_model.generate_content(prompt, stream=True)
+            
+            accumulated_text = ""
+            async for chunk in response:
+                chunk_text = chunk.text
+                accumulated_text += chunk_text
+                
+                if websocket_manager := state.get('websocket_manager'):
+                    if job_id := state.get('job_id'):
+                        await websocket_manager.send_status_update(
+                            job_id=job_id,
+                            status="report_chunk",
+                            message="Polishing final report",
+                            result={
+                                "chunk": chunk_text,
+                                "step": "Editor"
+                            }
+                        )
+            
+            return accumulated_text.strip()
+        except Exception as e:
+            logger.error(f"Error in deduplication: {e}")
+            return content
 
     async def run(self, state: ResearchState) -> ResearchState:
         return await self.compile_briefings(state)

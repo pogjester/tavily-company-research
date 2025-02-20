@@ -18,40 +18,100 @@ class BaseResearcher:
             
         self.tavily_client = AsyncTavilyClient(api_key=tavily_key)
         self.openai_client = AsyncOpenAI(api_key=openai_key)
+        self.analyst_type = "base_researcher"  # Default type
+
+    @property
+    def analyst_type(self) -> str:
+        if not hasattr(self, '_analyst_type'):
+            raise ValueError("Analyst type not set by subclass")
+        return self._analyst_type
+
+    @analyst_type.setter
+    def analyst_type(self, value: str):
+        self._analyst_type = value
 
     async def generate_queries(self, state: Dict, prompt: str) -> List[str]:
         company = state.get("company", "Unknown Company")
+        industry = state.get("industry", "Unknown Industry")
+        hq = state.get("hq", "Unknown HQ")
         current_year = datetime.now().year
         
         try:
+            # Add logging
+            logger.info(f"Generating queries for {company} as {self.analyst_type}")
+            
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{
+                    "role": "system",
+                    "content": f"You are researching {company}, a company in the {industry} industry."
+                },
+                {
                     "role": "user",
                     "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
-{self._format_query_prompt(prompt, company, current_year)}"""
+{self._format_query_prompt(prompt, company, hq, current_year)}"""
                 }],
                 temperature=0,
-                max_tokens=4096
+                max_tokens=4096,
+                stream=True  # Enable streaming
             )
             
-            # Log the response for debugging
-            logger.debug(f"OpenAI response: {response}")
+            queries = []
+            current_query = ""
 
-            queries = [
-                q.strip() 
-                for q in response.choices[0].message.content.splitlines() 
-                if q.strip()
-            ]
+            # Stream the response
+            async for chunk in response:
+                if chunk.choices[0].finish_reason == "stop":
+                    break
+                    
+                content = chunk.choices[0].delta.content
+                if content:
+                    current_query += content
+                    
+                    # If we detect a newline, we've completed a query
+                    if '\n' in current_query:
+                        parts = current_query.split('\n')
+                        # Last part becomes the start of next query
+                        current_query = parts[-1]
+                        
+                        # Add completed queries
+                        for query in parts[:-1]:
+                            query = query.strip()
+                            if query:
+                                queries.append(query)
+                                # Send websocket update for new query
+                                if websocket_manager := state.get('websocket_manager'):
+                                    if job_id := state.get('job_id'):
+                                        await websocket_manager.send_status_update(
+                                            job_id=job_id,
+                                            status="query_generated",
+                                            message="Generated new research query",
+                                            result={
+                                                "query": query,
+                                                "query_number": len(queries),
+                                                "category": self.analyst_type
+                                            }
+                                        )
+
+            # Add final query if exists
+            if current_query.strip():
+                queries.append(current_query.strip())
             
+            # Add logging
+            logger.info(f"Generated {len(queries)} queries for {self.analyst_type}: {queries}")
+
             if not queries:
                 raise ValueError(f"No queries generated for {company}")
 
-            return queries[:4]  # Ensure max 4 queries
+            queries = queries[:4]  # Ensure max 4 queries
+            
+            # Add final logging
+            logger.info(f"Final queries for {self.analyst_type}: {queries}")
+            
+            return queries
             
         except Exception as e:
             logger.error(f"Error generating queries for {company}: {e}")
-            # Send error status
             if websocket_manager := state.get('websocket_manager'):
                 if job_id := state.get('job_id'):
                     await websocket_manager.send_status_update(
@@ -62,14 +122,16 @@ class BaseResearcher:
                     )
             return []
 
-    def _format_query_prompt(self, prompt, company, year):
+    def _format_query_prompt(self, prompt, company, hq, year):
         return f"""{prompt}
 
         Important Guidelines:
         - Focus ONLY on {company}-specific information
+        - The company is headquartered in {(hq, "Unknown")}
         - Include the year {year} in each query
         - Make queries brief and broad-sweeping
-        - Provide exactly 4 search queries (one per line)"""
+        - Provide exactly 4 search queries (one per line), with no hyphens or dashes
+        - DO NOT make assumptions about the industry - use only the provided industry information"""
 
     def _fallback_queries(self, company, year):
         return [

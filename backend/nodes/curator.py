@@ -132,7 +132,7 @@ class Curator:
         msg = [f"🔍 Curating research data for {company}"]
         
 
-        # Process each type of data
+        # Process each type of data with status updates
         data_types = {
             'financial_data': '💰 Financial',
             'news_data': '📰 News',

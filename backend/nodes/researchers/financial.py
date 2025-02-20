@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class FinancialAnalyst(BaseResearcher):
     def __init__(self) -> None:
         super().__init__()
-        self.analyst_type = "financial_analyst"
+        self.analyst_type = "financial_analyzer"
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
@@ -63,6 +63,19 @@ class FinancialAnalyst(BaseResearcher):
 
             # Final status update
             completion_msg = f"Completed analysis with {len(financial_data)} documents"
+            
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Used Tavily Search to find {len(financial_data)} documents",
+                        result={
+                            "step": "Search",
+                            "analyst_type": "News Scanner",
+                            "queries": queries
+                        }
+                    )
             
             # Update state
             messages.append(AIMessage(content=completion_msg))
