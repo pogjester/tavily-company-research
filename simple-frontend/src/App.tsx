@@ -515,35 +515,45 @@ function App() {
                 <ReactMarkdown
                   rehypePlugins={[rehypeRaw]}
                   components={{
-                    ul: ({node, ...props}) => (
-                      <ul className="list-disc list-outside ml-5 space-y-1" {...props} />
+                    // Main container with consistent spacing
+                    div: ({node, ...props}) => (
+                      <div className="space-y-6" {...props} />
                     ),
-                    li: ({node, ...props}) => (
-                      <li className="text-gray-300" {...props} />
-                    ),
+                    // Main title (h1)
                     h1: ({node, ...props}) => (
-                      <h1 className="text-2xl font-bold text-white mt-6 mb-4" {...props} />
+                      <h1 className="text-3xl font-bold text-white mt-10 mb-6" {...props} />
                     ),
+                    // Section headers (h2)
                     h2: ({node, ...props}) => (
-                      <h2 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
+                      <h2 className="text-2xl font-semibold text-white mt-8 mb-4" {...props} />
                     ),
-                    hr: ({node, ...props}) => (
-                      <hr className="border-gray-700 my-4" {...props} />
+                    // Subsection headers (h3)
+                    h3: ({node, ...props}) => (
+                      <h3 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
                     ),
+                    // Lists with proper spacing
+                    ul: ({node, ...props}) => (
+                      <ul className="my-4" {...props} />
+                    ),
+                    // List items with proper indentation and bullet points
+                    li: ({node, ...props}) => (
+                      <li className="ml-8 mb-3 text-gray-300 relative before:content-['•'] before:text-gray-500 before:absolute before:left-[-1em]">
+                        <div className="ml-2">{props.children}</div>
+                      </li>
+                    ),
+                    // Paragraphs with consistent spacing
                     p: ({node, ...props}) => (
-                      <p className="text-gray-300 mb-3" {...props} />
+                      <p className="text-gray-300 leading-relaxed mb-4" {...props} />
                     ),
+                    // Other text elements
                     text: ({node, ...props}) => (
                       <span className="!text-gray-300" {...props} />
                     ),
                     strong: ({node, ...props}) => (
                       <strong className="text-gray-300 font-semibold" {...props} />
                     ),
-                    pre: ({node, ...props}) => (
-                      <pre className="text-gray-300 bg-transparent" {...props} />
-                    ),
-                    code: ({node, ...props}) => (
-                      <code className="text-gray-300 bg-transparent" {...props} />
+                    hr: ({node, ...props}) => (
+                      <hr className="border-gray-700 my-8" {...props} />
                     ),
                     a: ({node, href, ...props}) => (
                       <a 
