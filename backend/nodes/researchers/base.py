@@ -37,7 +37,6 @@ class BaseResearcher:
         current_year = datetime.now().year
         
         try:
-            # Add logging
             logger.info(f"Generating queries for {company} as {self.analyst_type}")
             
             response = await self.openai_client.chat.completions.create(
@@ -53,13 +52,13 @@ class BaseResearcher:
                 }],
                 temperature=0,
                 max_tokens=4096,
-                stream=True  # Enable streaming
+                stream=True
             )
             
             queries = []
             current_query = ""
+            current_query_number = 1
 
-            # Stream the response
             async for chunk in response:
                 if chunk.choices[0].finish_reason == "stop":
                     break
@@ -67,6 +66,21 @@ class BaseResearcher:
                 content = chunk.choices[0].delta.content
                 if content:
                     current_query += content
+                    
+                    # Send the current state of the query being typed
+                    if websocket_manager := state.get('websocket_manager'):
+                        if job_id := state.get('job_id'):
+                            await websocket_manager.send_status_update(
+                                job_id=job_id,
+                                status="query_generating",
+                                message="Generating research query",
+                                result={
+                                    "query": current_query,
+                                    "query_number": current_query_number,
+                                    "category": self.analyst_type,
+                                    "is_complete": False
+                                }
+                            )
                     
                     # If we detect a newline, we've completed a query
                     if '\n' in current_query:
@@ -79,7 +93,7 @@ class BaseResearcher:
                             query = query.strip()
                             if query:
                                 queries.append(query)
-                                # Send websocket update for new query
+                                # Send completed query
                                 if websocket_manager := state.get('websocket_manager'):
                                     if job_id := state.get('job_id'):
                                         await websocket_manager.send_status_update(
@@ -89,14 +103,30 @@ class BaseResearcher:
                                             result={
                                                 "query": query,
                                                 "query_number": len(queries),
-                                                "category": self.analyst_type
+                                                "category": self.analyst_type,
+                                                "is_complete": True
                                             }
                                         )
+                                current_query_number += 1
 
-            # Add final query if exists
+            # Handle final query
             if current_query.strip():
-                queries.append(current_query.strip())
-            
+                query = current_query.strip()
+                queries.append(query)
+                if websocket_manager := state.get('websocket_manager'):
+                    if job_id := state.get('job_id'):
+                        await websocket_manager.send_status_update(
+                            job_id=job_id,
+                            status="query_generated",
+                            message="Generated new research query",
+                            result={
+                                "query": query,
+                                "query_number": len(queries),
+                                "category": self.analyst_type,
+                                "is_complete": True
+                            }
+                        )
+
             # Add logging
             logger.info(f"Generated {len(queries)} queries for {self.analyst_type}: {queries}")
 
@@ -150,7 +180,7 @@ class BaseResearcher:
                 query,
                 search_depth="basic",
                 include_raw_content=False,
-                max_results=10
+                max_results=15
             )
             
             docs = {}

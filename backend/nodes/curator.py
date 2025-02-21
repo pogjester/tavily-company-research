@@ -32,7 +32,18 @@ class Curator:
         return "\n\n".join(parts)
 
 
-    async def evaluate_documents(self, docs: list, context: Dict[str, str]) -> list:
+    async def evaluate_documents(self, state: ResearchState, docs: list, context: Dict[str, str]) -> list:
+        if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Evaluating documents",
+                        result={
+                            "step": "Curation",
+                        }
+                    )
+        
         """Evaluate a list of documents' relevance using Cohere rerank, using the specific query for each document."""
         if not docs:
             return []
@@ -89,7 +100,7 @@ class Curator:
                         print(f"\nDocument score: {score:.3f} for '{doc.get('title', 'No title')}'")
 
                         # Only keep documents with good relevance
-                        if score >= 0.6:
+                        if score >= 0.3:
                             evaluated_doc = {
                                 **doc,
                                 "evaluation": {
@@ -177,7 +188,7 @@ class Curator:
                     )
 
             # Evaluate documents based on content
-            evaluated_docs = await self.evaluate_documents(docs, context)
+            evaluated_docs = await self.evaluate_documents(state, docs, context)
 
             if not evaluated_docs:
                 msg.append(f"  ⚠️ No relevant documents found")
@@ -185,7 +196,7 @@ class Curator:
 
             # Filter documents with a score above threshold and limit to top 10
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.5}
+                           if doc['evaluation']['overall_score'] >= 0.3}
 
             # Sort by score and limit to top 10
             if len(relevant_docs) > 10:

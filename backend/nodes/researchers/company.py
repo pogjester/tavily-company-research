@@ -20,8 +20,6 @@ class CompanyAnalyzer(BaseResearcher):
         - Company history and milestones
         - Leadership and management team
         - Business model and strategy
-
-        Cover both historical context and current operations.
         """)
 
         # Add message to show subqueries with emojis

@@ -28,7 +28,7 @@ langchain-nvidia-ai-endpoints==0.3.9
 langchain-openai==0.3.5
 langgraph==0.2.71
 langgraph-checkpoint==2.0.15
-langgraph-sdk==0.1.51
+langgraph-sdk>=0.1.51
 langsmith==0.3.8
 MarkupSafe==3.0.2
 multidict==6.1.0
@@ -59,3 +59,4 @@ websockets==12.0
 python-multipart==0.0.9
 starlette==0.36.3
 pymongo==4.6.1
+google-generativeai==0.8.4

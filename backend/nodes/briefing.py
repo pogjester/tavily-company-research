@@ -13,15 +13,6 @@ class Briefing:
     """Creates briefings for each research category and updates the ResearchState."""
     
     def __init__(self) -> None:
-        # openai_key = os.getenv("OPENAI_API_KEY")
-        # if not openai_key:
-        #     raise ValueError("OPENAI_API_KEY environment variable is not set")
-        # self.llm = ChatOpenAI(
-        #     model_name="gpt-4o",
-        #     temperature=0,
-        #     max_tokens=4096,
-        #     api_key=openai_key
-        # )
         self.max_doc_length = 8000  # Maximum document content length
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         if not self.gemini_key:
@@ -55,17 +46,13 @@ class Briefing:
 
         prompts = {
             'financial': f"""You are analyzing financial information about {company} in the {industry} industry.
-Based on the provided documents, create a concise financial briefing covering key financial metrics, market valuation, funding status, and notable developments. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, do not mention it.
-Format your response as bullet points without introductions or conclusions.""",
+Based on the provided documents, create a concise financial briefing covering key financial metrics, market valuation, funding status, etc. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, do not mention it. Use bullet points and lists to make the briefing more readable.""",
             'news': f"""You are analyzing recent news about {company} in the {industry} industry.
-Based on the provided documents, create a recent news summary covering major developments, key announcements, partnerships, and public perception. Don't provide any basic descriptions of the company Include dates whenever possible.
-Format your response as bullet points without introductions or conclusions.""",
+Based on the provided documents, create a recent news summary covering major developments, key announcements, partnerships, and public perception. Include dates whenever possible. Use bullet points and lists to make the briefing more readable. Please confine your response to news, do not include general information about the company or its products. """,
             'industry': f"""You are analyzing {company}'s position in the {industry} industry.
-Based on the provided documents, create a concise industry briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. 
-Format your response as bullet points without introductions or conclusions.""",
+Based on the provided documents, create a concise industry briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. Maintain an informative and insightful tone, keeping your analysis professional and neutral. Keep industry analysis focused on the sub vertical of the company, avoid general industry trends. Use bullet points and lists to make the briefing more readable.""",
             'company': f"""You are analyzing core information about {company} in the {industry} industry.
-Based on the provided documents, create a concise but detailed company briefing covering offerings, history,business model, leadership, and market presence. Start at the highest level and work your way down to the most specific.
-Format your response as bullet points without introductions or conclusions."""
+Based on the provided documents, create a concise but detailed company briefing covering offerings, history, business model, leadership team, etc. Start at the highest level, sharply describing what the company does in a few sentences and work your way down to the more specific details. Maintain an informative and insightful tone, keeping your analysis professional and neutral. Use bullet points and lists to make the briefing more readable."""
         }
         
         # Normalize docs to a list of (url, doc) tuples
@@ -94,12 +81,13 @@ Format your response as bullet points without introductions or conclusions."""
                 break
         
         separator = "\n" + "-" * 40 + "\n"
-        prompt = f"""{prompts.get(category, 'Create a research briefing based on the provided documents.')}
+        prompt = f"""{prompts.get(category, 'Create an informative and insightful research briefing on {company} in the {industry} industry based on the provided documents.')}
 
-Analyze the following documents and extract key information about {company} in the {industry} industry:
+Analyze the following documents and extract key information:
+
 {separator}{separator.join(doc_texts)}{separator}
 
-Create a concise briefing with factual, verifiable information without introductions or conclusions. Avoid using the company name repeatedly."""
+Create a concise briefing with factual, verifiable information without introductions or conclusions."""
         
         try:
             logger.info("Sending prompt to LLM")

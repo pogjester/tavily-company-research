@@ -12,16 +12,6 @@ class Editor:
     """Compiles individual section briefings into a cohesive final report."""
     
     def __init__(self) -> None:
-        # openai_key = os.getenv("OPENAI_API_KEY")
-        # if not openai_key:
-        #     raise ValueError("OPENAI_API_KEY environment variable is not set")
-            
-        # self.llm = ChatOpenAI(
-        #     model_name="gpt-4o",
-        #     temperature=0,
-        #     max_tokens=4096,
-        #     api_key=openai_key,
-        # )
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         if not self.gemini_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
@@ -177,12 +167,13 @@ class Editor:
 Original section content:
 {combined_content}
 
-Create an initial comprehensive report that:
+Create a comprehensive report on {company} that:
 1. Integrates information from all sections into a cohesive narrative
 2. Maintains the most important details from each section
 3. Organizes information logically within each section
 4. Uses clear section headers and structure
 5. Preserves all factual information
+6. Focuses on the company: {company}
 
 Return the compiled report maintaining the markdown format."""
 
@@ -215,20 +206,19 @@ Return the compiled report maintaining the markdown format."""
     async def deduplicate_content(self, state: ResearchState, content: str, company: str) -> str:
         """Clean up and deduplicate the compiled report."""
         
-        prompt = f"""You are polishing a research report about {company}.
+        prompt = f"""You are an expert editor. You are given a report on {company}.
 
 Current report:
 {content}
 
 Create a refined version that:
-1. Removes any duplicate information
+1. Removes repetitive information
 2. Improves the flow and readability
 3. Ensures consistent formatting and style
 4. Removes sections that don't have any useful content
 5. Maintains all unique insights
-6. Uses clear bullet points for key information
 
-Return the polished report maintaining the markdown format."""
+Return an flawless, detailed, and easily readable report maintaining the markdown format."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)

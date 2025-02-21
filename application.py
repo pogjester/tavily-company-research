@@ -71,8 +71,10 @@ job_status = defaultdict(lambda: {
     "last_update": datetime.now().isoformat()
 })
 
-# Initialize MongoDB service
-mongodb = MongoDBService(os.getenv("MONGODB_URI"))
+# Initialize MongoDB service if URI is provided
+mongodb = None
+if os.getenv("MONGODB_URI"):
+    mongodb = MongoDBService(os.getenv("MONGODB_URI"))
 
 class ResearchRequest(BaseModel):
     company: str
@@ -118,7 +120,8 @@ async def research(data: ResearchRequest):
 async def process_research(job_id: str, data: ResearchRequest):
     """Background task to process research request."""
     try:
-        mongodb.create_job(job_id, data.dict())
+        if mongodb:
+            mongodb.create_job(job_id, data.dict())
         await asyncio.sleep(1)  # Allow WebSocket connection
 
         await manager.send_status_update(job_id, status="processing", message="Starting research")
@@ -159,12 +162,14 @@ async def process_research(job_id: str, data: ResearchRequest):
 
         await manager.send_status_update(job_id, status="completed", message="Research completed", result=final_result)
 
-        mongodb.update_job(job_id=job_id, status="completed")
-        mongodb.store_report(job_id=job_id, report_data=final_result)
+        if mongodb:
+            mongodb.update_job(job_id=job_id, status="completed")
+            mongodb.store_report(job_id=job_id, report_data=final_result)
 
     except Exception as e:
         logger.error(f"Research failed: {e}")
-        mongodb.update_job(job_id=job_id, status="failed", error=str(e))
+        if mongodb:
+            mongodb.update_job(job_id=job_id, status="failed", error=str(e))
 
 @app.get("/research/pdf/{filename}")
 async def get_pdf(filename: str):

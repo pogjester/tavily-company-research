@@ -27,10 +27,19 @@ type Query = {
   category: string;
 };
 
+// Add a new type for streaming queries
+type StreamingQuery = {
+  text: string;
+  number: number;
+  category: string;
+  isComplete: boolean;
+};
+
 type ResearchState = {
   status: string;
   message: string;
   queries: Query[];
+  streamingQueries: Record<string, StreamingQuery>;  // Track queries being typed
   // ... other existing state properties
 };
 
@@ -90,6 +99,7 @@ function App() {
     status: "idle",
     message: "",
     queries: [],
+    streamingQueries: {},
     // ... other state
   });
 
@@ -116,19 +126,41 @@ function App() {
         const statusData = rawData.data;
 
         // Handle query updates
-        if (statusData.status === "query_generated") {
-          console.log("Received query update:", statusData.result);
-          setResearchState((prev) => ({
-            ...prev,
-            queries: [
-              ...prev.queries,
-              {
-                text: statusData.result.query,
-                number: statusData.result.query_number,
-                category: statusData.result.category,
-              },
-            ],
-          }));
+        if (statusData.status === "query_generating") {
+          setResearchState((prev) => {
+            const key = `${statusData.result.category}-${statusData.result.query_number}`;
+            return {
+              ...prev,
+              streamingQueries: {
+                ...prev.streamingQueries,
+                [key]: {
+                  text: statusData.result.query,
+                  number: statusData.result.query_number,
+                  category: statusData.result.category,
+                  isComplete: false
+                }
+              }
+            };
+          });
+        } else if (statusData.status === "query_generated") {
+          setResearchState((prev) => {
+            // Remove from streaming queries and add to completed queries
+            const key = `${statusData.result.category}-${statusData.result.query_number}`;
+            const { [key]: _, ...remainingStreamingQueries } = prev.streamingQueries;
+            
+            return {
+              ...prev,
+              streamingQueries: remainingStreamingQueries,
+              queries: [
+                ...prev.queries,
+                {
+                  text: statusData.result.query,
+                  number: statusData.result.query_number,
+                  category: statusData.result.category,
+                },
+              ],
+            };
+          });
         }
         // Handle report streaming
         else if (statusData.status === "report_chunk") {
@@ -490,11 +522,16 @@ function App() {
                 {researchState.queries
                   .filter((q) => q.category === "company_analyzer")
                   .map((query, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
-                    >
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
                       <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("company_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
                     </div>
                   ))}
               </div>
@@ -508,11 +545,16 @@ function App() {
                 {researchState.queries
                   .filter((q) => q.category === "industry_analyzer")
                   .map((query, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
-                    >
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
                       <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("industry_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
                     </div>
                   ))}
               </div>
@@ -526,11 +568,16 @@ function App() {
                 {researchState.queries
                   .filter((q) => q.category === "financial_analyzer")
                   .map((query, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
-                    >
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
                       <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("financial_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
                     </div>
                   ))}
               </div>
@@ -544,11 +591,16 @@ function App() {
                 {researchState.queries
                   .filter((q) => q.category === "news_analyzer")
                   .map((query, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm"
-                    >
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
                       <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("news_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
                     </div>
                   ))}
               </div>
