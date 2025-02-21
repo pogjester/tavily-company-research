@@ -49,12 +49,20 @@ type DocCounts = {
   news: DocCount;
 };
 
+type BriefingStatus = {
+  company: boolean;
+  industry: boolean;
+  financial: boolean;
+  news: boolean;
+};
+
 type ResearchState = {
   status: string;
   message: string;
   queries: Query[];
   streamingQueries: Record<string, StreamingQuery>;
   docCounts?: DocCounts;
+  briefingStatus: BriefingStatus;
 };
 
 console.log("=== DIRECT CONSOLE TEST ===");
@@ -114,7 +122,12 @@ function App() {
     message: "",
     queries: [],
     streamingQueries: {},
-    // ... other state
+    briefingStatus: {
+      company: false,
+      industry: false,
+      financial: false,
+      news: false
+    }
   });
 
   // Add ref for status section
@@ -138,6 +151,23 @@ function App() {
 
       if (rawData.type === "status_update") {
         const statusData = rawData.data;
+
+        // Handle briefing status updates
+        if (statusData.status === "briefing_start") {
+          setStatus({
+            step: "Briefing",
+            message: statusData.message
+          });
+        } else if (statusData.status === "briefing_complete" && statusData.result?.category) {
+          const category = statusData.result.category;
+          setResearchState((prev) => ({
+            ...prev,
+            briefingStatus: {
+              ...prev.briefingStatus,
+              [category]: true
+            }
+          }));
+        }
 
         // Handle query updates
         if (statusData.status === "query_generating") {
@@ -194,6 +224,19 @@ function App() {
             step: statusData.result?.step || "Processing",
             message: statusData.message || "Processing...",
           });
+          
+          // Reset briefing status when starting a new research
+          if (statusData.result?.step === "Briefing") {
+            setResearchState((prev) => ({
+              ...prev,
+              briefingStatus: {
+                company: false,
+                industry: false,
+                financial: false,
+                news: false
+              }
+            }));
+          }
           
           // Initialize doc counts when curation starts
           if (statusData.result?.step === "Curation" && statusData.result.doc_counts) {
@@ -364,6 +407,43 @@ function App() {
               <div className="text-white">
                 <div className="text-2xl font-bold">{counts.kept}</div>
                 <div className="text-sm text-gray-400">kept from {counts.initial}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Add BriefingProgress component
+  const BriefingProgress = () => {
+    const categories = [
+      { key: 'company' as keyof BriefingStatus, icon: '🏢', label: 'Company Analysis' },
+      { key: 'industry' as keyof BriefingStatus, icon: '🏭', label: 'Industry Analysis' },
+      { key: 'financial' as keyof BriefingStatus, icon: '💰', label: 'Financial Analysis' },
+      { key: 'news' as keyof BriefingStatus, icon: '📰', label: 'News Analysis' }
+    ] as const;
+
+    return (
+      <div className="glass rounded-xl shadow-lg p-6 mt-4">
+        <h2 className="text-lg font-semibold text-white mb-4">Research Briefings</h2>
+        <div className="grid grid-cols-4 gap-4">
+          {categories.map(({ key, icon, label }) => (
+            <div key={key} className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <span className="mr-2">{icon}</span>
+                <h3 className="text-sm font-medium text-gray-400">{label}</h3>
+              </div>
+              <div className="text-white">
+                {researchState.briefingStatus[key] ? (
+                  <div className="flex items-center justify-center text-green-400">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center text-blue-400">
+                    <Loader2 className="animate-spin h-6 w-6" />
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -547,6 +627,11 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Briefing Progress - Show during briefing phase */}
+        {isResearching && status?.step === "Briefing" && (
+          <BriefingProgress />
         )}
 
         {/* Document Curation Stats - Show only during curation */}

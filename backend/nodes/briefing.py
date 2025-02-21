@@ -35,11 +35,11 @@ class Briefing:
             if job_id := context.get('job_id'):
                 await websocket_manager.send_status_update(
                     job_id=job_id,
-                    status="processing",
+                    status="briefing_start",
                     message=f"Generating {category} briefing",
                     result={
                         "step": "Briefing",
-                        "substep": category,
+                        "category": category,
                         "total_docs": len(docs)
                     }
                 )
@@ -174,6 +174,20 @@ Create a concise briefing with factual, verifiable information without introduct
             if not content:
                 logger.error(f"Empty response from LLM for {category} briefing")
                 return {'content': ''}
+
+            # Send completion status
+            if websocket_manager := context.get('websocket_manager'):
+                if job_id := context.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="briefing_complete",
+                        message=f"Completed {category} briefing",
+                        result={
+                            "step": "Briefing",
+                            "category": category
+                        }
+                    )
+
             return {'content': content}
         except Exception as e:
             logger.error(f"Error generating {category} briefing: {e}")
