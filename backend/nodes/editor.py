@@ -3,6 +3,7 @@ from typing import Dict, Any
 import google.generativeai as genai
 import os
 import logging
+from ..utils.markdown import standardize_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -80,85 +81,102 @@ class Editor:
             state['report'] = None
             logger.error("No briefings found in state")
         else:
-            compiled_report = await self.edit_report(state, individual_briefings, context)
-            if not compiled_report.strip():
-                logger.error("Compiled report is empty!")
+            try:
+                compiled_report = await self.edit_report(state, individual_briefings, context)
+                if not compiled_report or not compiled_report.strip():
+                    logger.error("Compiled report is empty!")
+                    state['report'] = None
+                    msg.append("\n⚠️ Error: Failed to generate report content")
+                else:
+                    state['report'] = compiled_report
+                    logger.info(f"Successfully compiled report with {len(compiled_report)} characters")
+                    msg.append("\n✅ Report compilation complete")
+                    
+                    print(f"\n{'='*80}")
+                    print(f"Report compilation completed for {company}")
+                    print(f"Sections included: {', '.join(individual_briefings.keys())}")
+                    print(f"Report length: {len(compiled_report)} characters")
+                    print(f"{'='*80}")
+            except Exception as e:
+                logger.error(f"Error during report compilation: {e}")
                 state['report'] = None
-                msg.append("\n⚠️ Error: Failed to generate report content")
-            else:
-                state['report'] = compiled_report
-                logger.info(f"Successfully compiled report with {len(compiled_report)} characters")
-                msg.append("\n✅ Report compilation complete")
-                
-            print(f"\n{'='*80}")
-            print(f"Report compilation completed for {company}")
-            print(f"Sections included: {', '.join(individual_briefings.keys())}")
-            print(f"Report length: {len(compiled_report)} characters")
-            print(f"{'='*80}")
+                msg.append(f"\n⚠️ Error during report compilation: {str(e)}")
         
         state.setdefault('messages', []).append(AIMessage(content="\n".join(msg)))
-  
         return state
     
     async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
         """Compile section briefings into a final report and update the state."""
-        company = context.get('company', 'Unknown')
-        industry = context.get('industry', 'Unknown')
-        hq = context.get('hq_location', 'Unknown')
-        
-        # Step 1: Initial Compilation
-        if websocket_manager := state.get('websocket_manager'):
-            if job_id := state.get('job_id'):
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="processing",
-                    message="Compiling initial research report",
-                    result={
-                        "step": "Editor",
-                        "substep": "compilation"
-                    }
-                )
+        try:
+            company = context.get('company', 'Unknown')
+            industry = context.get('industry', 'Unknown')
+            hq = context.get('hq_location', 'Unknown')
+            
+            # Step 1: Initial Compilation
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message="Compiling initial research report",
+                        result={
+                            "step": "Editor",
+                            "substep": "compilation"
+                        }
+                    )
 
-        initial_report = await self.compile_content(state, briefings, company)
+            initial_report = await self.compile_content(state, briefings, company)
+            if not initial_report:
+                logger.error("Initial compilation failed")
+                return ""
 
-        # Step 2: Deduplication and Cleanup
-        if websocket_manager := state.get('websocket_manager'):
-            if job_id := state.get('job_id'):
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="processing",
-                    message="Cleaning up and organizing report",
-                    result={
-                        "step": "Editor",
-                        "substep": "cleanup"
-                    }
-                )
+            # Step 2: Deduplication and Cleanup
+            if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message="Cleaning up and organizing report",
+                        result={
+                            "step": "Editor",
+                            "substep": "cleanup"
+                        }
+                    )
 
-        final_report = await self.deduplicate_content(state, initial_report, company)
-        
-        # Add references and finalize
-        if references := state.get('references', []):
-            reference_lines = ["\n\n## References\n---\n"]
-            for ref in references:
-                reference_lines.append(f"• [{ref}]({ref})")
-            final_report += "\n".join(reference_lines)
-        
-        logger.info(f"Final report compiled with {len(final_report)} characters")
-        
-        # Log a preview of the report
-        logger.info("Final report preview:")
-        logger.info(final_report[:500])
-        
-        # Update state with the final report
-        state['report'] = final_report
-        
-        return final_report
-
+            final_report = await self.deduplicate_content(state, initial_report, company)
+            
+            # Ensure final_report is a string before proceeding
+            final_report = final_report or ""
+            
+            # Add references and finalize
+            if references := state.get('references', []):
+                reference_lines = ["\n\n## References\n---\n"]
+                for ref in references:
+                    reference_lines.append(f"• [{ref}]({ref})")
+                final_report += "\n".join(reference_lines)
+            
+            # Final step: Standardize markdown format
+            final_report = standardize_markdown(final_report)
+            
+            logger.info(f"Final report compiled with {len(final_report)} characters")
+            
+            # Log a preview of the report
+            logger.info("Final report preview:")
+            logger.info(final_report[:500])
+            
+            # Update state with the final report
+            state['report'] = final_report
+            
+            return final_report
+        except Exception as e:
+            logger.error(f"Error in edit_report: {e}")
+            return ""
+    
     async def compile_content(self, state: ResearchState, briefings: Dict[str, str], company: str) -> str:
         """Initial compilation of research sections."""
         
         combined_content = "\n\n".join(
-            f"## {header.title()}\n---\n{content}"
+            f"## {header.title()}\n{content}"
             for header, content in briefings.items()
         )
         
@@ -175,7 +193,7 @@ Create a comprehensive report on {company} that:
 5. Preserves all factual information 
 6. Focuses on {company}
 
-Return the compiled report in markdown format."""
+Return the compiled report in perfectly formatted markdown. Do not include any explanatory text."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)
@@ -183,7 +201,7 @@ Return the compiled report in markdown format."""
             accumulated_text = ""
             async for chunk in response:
                 chunk_text = chunk.text
-                print(chunk.text)
+                print(chunk_text)
                 accumulated_text += chunk_text
                 
                 if websocket_manager := state.get('websocket_manager'):
@@ -198,27 +216,38 @@ Return the compiled report in markdown format."""
                             }
                         )
             
-            return accumulated_text.strip()
+            return (accumulated_text or "").strip()
         except Exception as e:
             logger.error(f"Error in initial compilation: {e}")
-            return combined_content
+            return (combined_content or "").strip()
 
     async def deduplicate_content(self, state: ResearchState, content: str, company: str) -> str:
         """Clean up and deduplicate the compiled report."""
         
-        prompt = f"""You are an expert editor. You are given a report on {company}.
+        prompt = f"""You are an expert markdown editor. You are given a report on {company}.
 
 Current report:
 {content}
 
-Create a refined version that:
-1. Removes repetitive information
-2. Improves the flow and readability
-3. Ensures consistent markdown formatting and style
-4. Removes sections that don't have any useful content or are missing key information
-5. Maintains all unique insights
+Create a refined version that follows these EXACT markdown formatting rules:
+1. Main title should use a single # (e.g. "# Company Research Report")
+2. All section headers should use ## without any horizontal rules (e.g. "## Company Overview")
+3. All subsections should use ### (e.g. "### Core Products")
+4. Use * consistently for all bullet points (never use • or -)
+5. Add a blank line before and after each section and subsection header
+6. Ensure consistent indentation for bullet points
+7. Use bold (**text**) for emphasis, not italics
+8. Keep one blank line between bullet points for readability
+9. References should be properly formatted as markdown links
 
-Return an flawless, detailed, and easily readable report in markdown format. Proivde no explanations or commentary."""
+Additionally:
+1. Remove any redundant information
+2. Improve flow and readability
+3. Remove sections lacking substantial content
+4. Remove transitional commentary / explanations that an LLM might have added.
+5. Ensure perfect markdown syntax
+
+Return the polished report in flawless markdown format. Provide no explanations or commentary."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)
@@ -240,10 +269,10 @@ Return an flawless, detailed, and easily readable report in markdown format. Pro
                             }
                         )
             
-            return accumulated_text.strip()
+            return (accumulated_text or "").strip()
         except Exception as e:
             logger.error(f"Error in deduplication: {e}")
-            return content
+            return (content or "").strip()
 
     async def run(self, state: ResearchState) -> ResearchState:
         return await self.compile_briefings(state)

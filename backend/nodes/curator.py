@@ -84,7 +84,7 @@ class Curator:
             # Evaluate each document with its specific query
             for doc, formatted_doc in zip(valid_docs, documents):
                 tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
-                if tavily_score >= 0.2:
+                if tavily_score >= 0.25:
                     specific_query = doc.get('query', '')  # Use the specific query for this document
                     print(f"\nEvaluating document with query: {specific_query} (Tavily score: {tavily_score:.3f})")
                     response = self.co.rerank(
@@ -214,11 +214,13 @@ class Curator:
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
                             if doc['evaluation']['overall_score'] >= 0.3}
             
-            relevant_docs = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
-
-            # Sort by score and limit to top 20
-            if len(relevant_docs) > 30: 
-                relevant_docs = dict(relevant_docs[:30])
+            # Sort by score but maintain as dictionary
+            sorted_items = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
+            
+            # Limit to top 30 while keeping as dictionary
+            if len(sorted_items) > 30:
+                sorted_items = sorted_items[:30]
+            relevant_docs = dict(sorted_items)
 
             # Track document counts
             doc_counts[data_field] = {

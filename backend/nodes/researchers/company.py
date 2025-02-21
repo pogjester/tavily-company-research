@@ -18,7 +18,7 @@ class CompanyAnalyzer(BaseResearcher):
         Generate queries on the company fundamentals of {company} in the {industry} industry such as:
         - Core products and services
         - Company history and milestones
-        - Leadership and management team
+        - Leadership team
         - Business model and strategy
         """)
 

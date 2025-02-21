@@ -305,14 +305,14 @@ function App() {
   };
 
   // Add document count display component
-  const DocumentStats = ({ docCounts }) => {
+  const DocumentStats = ({ docCounts }: { docCounts: Record<string, DocCount> }) => {
     if (!docCounts) return null;
 
     return (
       <div className="glass rounded-xl shadow-lg p-6 mt-4">
         <h2 className="text-lg font-semibold text-white mb-4">Document Curation Stats</h2>
         <div className="grid grid-cols-4 gap-4">
-          {Object.entries(docCounts).map(([category, counts]) => (
+          {Object.entries(docCounts).map(([category, counts]: [string, DocCount]) => (
             <div key={category} className="text-center">
               <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
               <div className="text-white">
@@ -523,44 +523,121 @@ function App() {
                     h1: ({node, ...props}) => (
                       <h1 className="text-3xl font-bold text-white mt-10 mb-6" {...props} />
                     ),
-                    // Section headers (h2)
+                    // Main sections (##)
                     h2: ({node, ...props}) => (
-                      <h2 className="text-2xl font-semibold text-white mt-8 mb-4" {...props} />
+                      <h2 className="text-2xl font-bold text-white mt-8 mb-4" {...props} />
                     ),
-                    // Subsection headers (h3)
+                    // Subsections (###)
                     h3: ({node, ...props}) => (
                       <h3 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
                     ),
-                    // Lists with proper spacing
-                    ul: ({node, ...props}) => (
-                      <ul className="my-4" {...props} />
+                    // Regular lists
+                    ul: ({node, ...props}: {node?: any, children?: React.ReactNode}) => (
+                      <ul className="space-y-2 my-4">{props.children}</ul>
                     ),
-                    // List items with proper indentation and bullet points
-                    li: ({node, ...props}) => (
-                      <li className="ml-8 mb-3 text-gray-300 relative before:content-['•'] before:text-gray-500 before:absolute before:left-[-1em]">
-                        <div className="ml-2">{props.children}</div>
+                    // Regular list items
+                    li: ({node, children}: {node?: any, children?: React.ReactNode}) => (
+                      <li className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
+                        <div className="inline-block pl-4">{children}</div>
                       </li>
                     ),
-                    // Paragraphs with consistent spacing
-                    p: ({node, ...props}) => (
-                      <p className="text-gray-300 leading-relaxed mb-4" {...props} />
-                    ),
+                    // Paragraphs that might contain subsections and bullet points
+                    p: ({node, children}: {node?: any, children?: React.ReactNode}) => {
+                      if (typeof children === 'string') {
+                        // Check if this is a bullet point list (even without newlines)
+                        if (children.trim().startsWith('•') || children.trim().startsWith('*')) {
+                          const bulletPoints = children
+                            .split('\n')
+                            .filter(line => line.trim())
+                            .map(line => line.replace(/^[•\*]\s*/, '').trim());
+
+                          return (
+                            <ul className="space-y-2 my-4">
+                              {bulletPoints.map((point, i) => (
+                                <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
+                                  <div className="inline-block pl-4">{point}</div>
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        }
+
+                        // Split content by double newlines to separate sections
+                        const sections = children.split('\n\n');
+                        
+                        return (
+                          <div className="space-y-6">
+                            {sections.map((section, idx) => {
+                              // Check if this is a subsection with bold header
+                              const headerMatch = section.match(/^\*\*(.*?)\*\*\n/);
+                              
+                              if (headerMatch) {
+                                const [fullMatch, headerText] = headerMatch;
+                                const bulletPoints = section
+                                  .slice(fullMatch.length)
+                                  .split('\n')
+                                  .filter(line => line.trim())
+                                  .map(line => line.replace(/^[•\*]\s*/, '').trim());
+
+                                return (
+                                  <div key={idx} className="space-y-3">
+                                    <h3 className="text-xl font-semibold text-white">{headerText}</h3>
+                                    <ul className="space-y-2">
+                                      {bulletPoints.map((point, i) => (
+                                        <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
+                                          <div className="inline-block pl-4">{point}</div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              }
+
+                              // Check if this section is a bullet point list
+                              if (section.trim().startsWith('•') || section.trim().startsWith('*')) {
+                                const bulletPoints = section
+                                  .split('\n')
+                                  .filter(line => line.trim())
+                                  .map(line => line.replace(/^[•\*]\s*/, '').trim());
+
+                                return (
+                                  <ul key={idx} className="space-y-2 my-4">
+                                    {bulletPoints.map((point, i) => (
+                                      <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
+                                        <div className="inline-block pl-4">{point}</div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                );
+                              }
+
+                              // Regular paragraph
+                              return (
+                                <p key={idx} className="text-gray-300 leading-relaxed">
+                                  {section}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      
+                      return <p className="text-gray-300 leading-relaxed">{children}</p>;
+                    },
                     // Other text elements
-                    text: ({node, ...props}) => (
-                      <span className="!text-gray-300" {...props} />
+                    text: ({children}: {children?: React.ReactNode}) => (
+                      <span className="text-gray-300">{children}</span>
                     ),
                     strong: ({node, ...props}) => (
                       <strong className="text-gray-300 font-semibold" {...props} />
                     ),
-                    hr: ({node, ...props}) => (
-                      <hr className="border-gray-700 my-8" {...props} />
-                    ),
+                    // Links
                     a: ({node, href, ...props}) => (
                       <a 
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300"
+                        className="text-blue-400 hover:text-blue-300 transition-colors"
                         {...props}
                       />
                     )

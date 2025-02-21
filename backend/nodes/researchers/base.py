@@ -157,9 +157,7 @@ class BaseResearcher:
 
         Important Guidelines:
         - Focus ONLY on {company}-specific information
-        - The company is headquartered in {(hq, "Unknown")}
-        - Include the year {year} in each query
-        - Make queries brief and broad-sweeping
+        - Make queries very brief and to the point
         - Provide exactly 4 search queries (one per line), with no hyphens or dashes
         - DO NOT make assumptions about the industry - use only the provided industry information"""
 
