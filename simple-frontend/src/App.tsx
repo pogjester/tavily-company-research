@@ -7,6 +7,7 @@ import {
   Search,
   Loader2,
   CheckCircle2,
+  Github,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from 'rehype-raw';
@@ -455,14 +456,25 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-6">
       <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Company Researcher
-          </h1>
-          <p className="text-gray-400">
-            Enter company details to begin research
-          </p>
+        {/* Header with GitHub Link */}
+        <div className="relative">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-white mb-2">
+              Tavily Company Researcher
+            </h1>
+            <p className="text-gray-400">
+              Enter company details to begin research
+            </p>
+          </div>
+          <a
+            href="https://github.com/pogjester"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute top-0 right-0 text-gray-400 hover:text-white transition-colors"
+            aria-label="GitHub Profile"
+          >
+            <Github className="h-8 w-8" />
+          </a>
         </div>
 
         {/* Form */}

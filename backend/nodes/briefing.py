@@ -117,8 +117,7 @@ Key requirements:
 1. Structure into these categories:
    - Major Announcements
      • Product / service launches
-     • Strategic initiatives
-     • Company milestones
+     • New initiatives
    
    - Partnerships
      • Integrations
@@ -130,7 +129,7 @@ Key requirements:
 
 2. Sort newest to oldest
 3. One event per bullet point
-4. No explanations or commentary."""
+4. Never provide explanations or commentary like "Here is the news..."."""
         }
         
         # Normalize docs to a list of (url, doc) tuples
