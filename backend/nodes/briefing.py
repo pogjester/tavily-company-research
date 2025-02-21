@@ -45,14 +45,92 @@ class Briefing:
                 )
 
         prompts = {
-            'financial': f"""You are analyzing financial information about {company} in the {industry} industry.
-Based on the provided documents, create a concise financial briefing covering key financial metrics, market valuation, funding status, etc. Never provide generic descriptions of GDP trends or broader economic trends. If a metric is $0 or not provided, do not mention it. Use bullet points and lists to make the briefing more readable.""",
-            'news': f"""You are analyzing recent news about {company} in the {industry} industry.
-Based on the provided documents, create a recent news summary covering major developments, key announcements, partnerships, and public perception. Include dates whenever possible. Use bullet points and lists to make the briefing more readable. Please confine your response to news, do not include general information about the company or its products. """,
-            'industry': f"""You are analyzing {company}'s position in the {industry} industry.
-Based on the provided documents, create a concise industry briefing covering market position, competitive landscape, trends, and regulatory environment. Don't provide any generic descriptions of the company. Maintain an informative and insightful tone, keeping your analysis professional and neutral. Keep industry analysis focused on the sub vertical of the company, avoid general industry trends. Use bullet points and lists to make the briefing more readable.""",
-            'company': f"""You are analyzing core information about {company} in the {industry} industry.
-Based on the provided documents, create a concise but detailed company briefing covering offerings, history, business model, leadership team, etc. Start at the highest level, sharply describing what the company does in a few sentences and work your way down to the more specific details. Maintain an informative and insightful tone, keeping your analysis professional and neutral. Use bullet points and lists to make the briefing more readable."""
+            'company': f"""Create a focused company briefing for {company}.
+Key requirements:
+1. Start with: "{company} is a [what] that [does what] for [whom]"
+2. Structure using these exact headers and bullet points:
+
+Core Product/Service
+• List distinct products/features
+• Include only verified technical capabilities
+
+Target Market
+• List specific target audiences
+• List verified use cases
+• List confirmed customers/partners
+
+Key Differentiators
+• List unique features
+• List proven advantages
+
+Business Model
+• Discuss product / service pricing
+• List distribution channels
+
+3. Each bullet must be a single, complete fact
+4. No paragraphs, only bullet points
+5. No explanations or commentary.""",
+
+            'industry': f"""Analyze {company}'s market position.
+Key requirements:
+1. Structure using these exact headers and bullet points:
+
+Market Overview
+• State {company}'s exact market segment
+• List market size with year
+• List growth rate with year range
+
+Direct Competition
+• List named direct competitors
+• List specific competing products
+• List market positions
+
+Competitive Advantages
+• List unique technical features
+• List proven advantages
+
+Market Challenges
+• List specific verified challenges
+
+2. Each bullet must be a single, complete news event.
+3. No paragraphs, only bullet points
+4. No explanations or commentary.""",
+
+            'financial': f"""List {company}'s financial data.
+Key requirements:
+1. Structure using these headers and bullet points:
+
+Funding & Investment
+• Total funding amount with date
+• List each funding round with date
+• List named investors
+
+Revenue Model
+• Discuss product / service pricing if applicable
+
+2. Include specific numbers when possible
+3. No paragraphs, only bullet points
+4. Never provide explanations or commentary.""",
+
+            'news': f"""List verified {company} news.
+Key requirements:
+1. Structure into these categories:
+   - Major Announcements
+     • Product / service launches
+     • Strategic initiatives
+     • Company milestones
+   
+   - Partnerships
+     • Integrations
+     • Collaborations
+   
+   - Recognition
+     • Awards
+     • Press coverage
+
+2. Sort newest to oldest
+3. One event per bullet point
+4. No explanations or commentary."""
         }
         
         # Normalize docs to a list of (url, doc) tuples
@@ -87,7 +165,7 @@ Analyze the following documents and extract key information:
 
 {separator}{separator.join(doc_texts)}{separator}
 
-Create a concise briefing with factual, verifiable information without introductions or conclusions."""
+Create a concise briefing with factual, verifiable information without introductions or conclusions. Never provide explanations or additional commentary. Never say "Okay here is..." or anything like that. Just provide the briefing."""
         
         try:
             logger.info("Sending prompt to LLM")

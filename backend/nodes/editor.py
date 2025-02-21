@@ -170,12 +170,12 @@ Original section content:
 Create a comprehensive report on {company} that:
 1. Integrates information from all sections into a cohesive narrative
 2. Maintains the most important details from each section
-3. Organizes information logically within each section
+3. Organizes information logically within each section and removes any transitional commentary / explanations
 4. Uses clear section headers and structure
-5. Preserves all factual information
-6. Focuses on the company: {company}
+5. Preserves all factual information 
+6. Focuses on {company}
 
-Return the compiled report maintaining the markdown format."""
+Return the compiled report in markdown format."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)
@@ -214,11 +214,11 @@ Current report:
 Create a refined version that:
 1. Removes repetitive information
 2. Improves the flow and readability
-3. Ensures consistent formatting and style
-4. Removes sections that don't have any useful content
+3. Ensures consistent markdown formatting and style
+4. Removes sections that don't have any useful content or are missing key information
 5. Maintains all unique insights
 
-Return an flawless, detailed, and easily readable report maintaining the markdown format."""
+Return an flawless, detailed, and easily readable report in markdown format. Proivde no explanations or commentary."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)

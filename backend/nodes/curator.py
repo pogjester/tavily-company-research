@@ -3,7 +3,7 @@ from typing import Dict, Any
 import os
 import cohere
 from ..classes import ResearchState
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 class Curator:
     def __init__(self) -> None:
@@ -158,16 +158,31 @@ class Curator:
             if not data:
                 continue
 
-            # Filter documents by unique base URLs
+            # Filter and normalize URLs
             unique_docs = {}
             for url, doc in data.items():
-                base_url = urlparse(url).netloc
-                if base_url not in unique_docs:
-                    unique_docs[base_url] = doc
+                try:
+                    # Parse and normalize URL
+                    parsed = urlparse(url)
+                    if not parsed.scheme:
+                        url = urljoin('https://', url)
+                    
+                    # Remove tracking parameters
+                    clean_url = parsed._replace(query='', fragment='').geturl()
+                    
+                    # Use clean URL as key
+                    if clean_url not in unique_docs:
+                        doc['url'] = clean_url  # Update doc with clean URL
+                        unique_docs[clean_url] = doc
+                except Exception as e:
+                    continue
 
             docs = list(unique_docs.values())
             curation_tasks.append((data_field, source_type, unique_docs.keys(), docs))
 
+        # Track document counts for each type
+        doc_counts = {}
+        
         # Process all document types in parallel
         all_top_references = []  # Keep track of all top references with scores
         for data_field, source_type, urls, docs in curation_tasks:
@@ -192,16 +207,24 @@ class Curator:
 
             if not evaluated_docs:
                 msg.append(f"  ⚠️ No relevant documents found")
+                doc_counts[data_field] = {"initial": len(docs), "kept": 0}
                 continue
 
-            # Filter documents with a score above threshold and limit to top 10
+            # Filter documents with a score above threshold
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                           if doc['evaluation']['overall_score'] >= 0.3}
+                            if doc['evaluation']['overall_score'] >= 0.3}
+            
+            relevant_docs = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
 
-            # Sort by score and limit to top 10
-            if len(relevant_docs) > 10:
-                sorted_docs = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
-                relevant_docs = dict(sorted_docs[:10])
+            # Sort by score and limit to top 20
+            if len(relevant_docs) > 30: 
+                relevant_docs = dict(relevant_docs[:30])
+
+            # Track document counts
+            doc_counts[data_field] = {
+                "initial": len(docs),
+                "kept": len(relevant_docs)
+            }
 
             if relevant_docs:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
@@ -227,6 +250,24 @@ class Curator:
         state['references'] = list(top_reference_urls)
         messages.append(AIMessage(content=f"Top References: {state['references']}"))
         print(f"Top References: {state['references']}")
+
+        # Send final curation stats
+        if websocket_manager := state.get('websocket_manager'):
+            if job_id := state.get('job_id'):
+                await websocket_manager.send_status_update(
+                    job_id=job_id,
+                    status="curation_complete",
+                    message="Document curation complete",
+                    result={
+                        "step": "Curation",
+                        "doc_counts": {
+                            "company": doc_counts.get('company_data', {"initial": 0, "kept": 0}),
+                            "industry": doc_counts.get('industry_data', {"initial": 0, "kept": 0}),
+                            "financial": doc_counts.get('financial_data', {"initial": 0, "kept": 0}),
+                            "news": doc_counts.get('news_data', {"initial": 0, "kept": 0})
+                        }
+                    }
+                )
 
         return state
 
