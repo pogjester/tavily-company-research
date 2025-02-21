@@ -234,7 +234,7 @@ class Curator:
 
             # Filter documents with a score above threshold
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs) 
-                            if doc['evaluation']['overall_score'] >= 0.3}
+                            if doc['evaluation']['overall_score'] >= 0.4}
             
             # Sort by score but maintain as dictionary
             sorted_items = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)

@@ -2,87 +2,78 @@ import re
 
 def standardize_markdown(text: str) -> str:
     """
-    Standardizes markdown formatting for consistent rendering.
-    Handles:
-    1. Section headers (##)
-    2. Subsection headers (**text**)
-    3. Bullet points (• or *)
-    4. Newlines and spacing
+    Simple markdown standardization that's forgiving and handles Gemini output gracefully.
+    Focuses on basic readability while preserving the original formatting intent.
     """
     if not text:
         return ""
 
-    # Split into sections (by ##)
-    sections = re.split(r'(?m)^##\s*', text)
+    # Normalize Unicode bullet points and tabs first
+    text = text.replace('\u2022\t', '* ')  # Convert "•\t" to "* "
+    text = text.replace('\u2022', '*')     # Convert remaining "•" to "*"
+    text = text.replace('\t', ' ')         # Convert tabs to spaces
+
+    # Split the text into lines
+    lines = text.split('\n')
+    processed_lines = []
     
-    # Process each section
-    processed_sections = []
-    
-    for i, section in enumerate(sections):
-        if not section.strip():
+    for line in lines:
+        line = line.strip()
+        
+        # Skip empty lines
+        if not line:
+            processed_lines.append('')
             continue
             
-        # First section might not start with ##
-        if i == 0 and not text.startswith('##'):
-            processed_sections.append(section)
+        # Handle headers (both # and ##)
+        if line.startswith('#'):
+            # Remove all # symbols and extra spaces
+            header = line.lstrip('#').strip()
+            if not processed_lines or processed_lines[-1] != '':
+                processed_lines.append('')
+            processed_lines.append('## ' + header)
+            processed_lines.append('')
             continue
             
-        # Process section content
-        lines = section.split('\n')
-        if not lines:
+        # Handle main section headers (lines followed by empty lines)
+        if (len(processed_lines) >= 2 and 
+            processed_lines[-1] == '' and 
+            processed_lines[-2] == '' and
+            not line.startswith('*') and
+            not line.startswith('-')):
+            processed_lines.append('## ' + line)
+            processed_lines.append('')
             continue
             
-        # First line is the section header
-        header = lines[0].strip()
-        content = '\n'.join(lines[1:]).strip()
-        
-        # Process subsections
-        subsections = re.split(r'\n\n\*\*(.*?)\*\*\n', content)
-        processed_content = []
-        
-        for j, subsection in enumerate(subsections):
-            if not subsection.strip():
-                continue
-                
-            if j % 2 == 0:  # Regular content
-                # Process any bullet points
-                processed_lines = []
-                current_list = []
-                
-                for line in subsection.split('\n'):
-                    line = line.strip()
-                    if not line:
-                        if current_list:
-                            processed_lines.append('\n'.join(current_list))
-                            current_list = []
-                        continue
-                        
-                    # Check if line is a bullet point
-                    if line.startswith('•') or line.startswith('*'):
-                        line = '* ' + line[1:].strip()
-                        current_list.append(line)
-                    else:
-                        if current_list:
-                            processed_lines.append('\n'.join(current_list))
-                            current_list = []
-                        processed_lines.append(line)
-                
-                if current_list:
-                    processed_lines.append('\n'.join(current_list))
-                
-                processed_content.append('\n\n'.join(processed_lines))
-            else:  # Subsection header
-                processed_content.append(f"\n### {subsection}\n")
-        
-        # Combine section
-        processed_section = f"## {header}\n\n{'\n'.join(processed_content)}"
-        processed_sections.append(processed_section)
+        # Handle subsection headers (lines starting with * and ending with **)
+        if line.startswith('* ') and line.endswith('**'):
+            # Remove the asterisks and add proper header formatting
+            header = line.strip('* ').rstrip('*')  # Remove both leading and trailing asterisks
+            processed_lines.append('### ' + header)
+            processed_lines.append('')
+            continue
+            
+        # Handle bullet points (- * and other variants)
+        if line.startswith('-') or line.startswith('*'):
+            # Check if it's a subsection header first (contains ** anywhere in the line)
+            if '**' in line:
+                # Remove asterisks and add proper header formatting
+                header = line.replace('*', '').strip()  # Remove all asterisks
+                if header.endswith('*'):  # Extra safety check
+                    header = header.rstrip('*')
+                processed_lines.append('### ' + header)
+                processed_lines.append('')
+            else:
+                # Convert any bullet point to a simple *
+                bullet_content = line.lstrip('-* ').strip()
+                processed_lines.append('* ' + bullet_content)
+            continue
+            
+        # Regular line
+        processed_lines.append(line)
     
-    # Combine all sections
-    result = '\n\n'.join(processed_sections)
+    # Join lines and clean up multiple newlines
+    text = '\n'.join(processed_lines)
+    text = re.sub(r'\n{3,}', '\n\n', text)
     
-    # Final cleanup
-    result = re.sub(r'\n{3,}', '\n\n', result)  # Remove extra newlines
-    result = re.sub(r'(?m)^\s*[•]\s*', '* ', result)  # Standardize bullet points
-    
-    return result.strip() 
+    return text.strip() 
