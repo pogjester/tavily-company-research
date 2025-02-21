@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from 'rehype-raw';
 
 type ResearchStatus = {
   step: string;
@@ -35,12 +36,24 @@ type StreamingQuery = {
   isComplete: boolean;
 };
 
+// Add to ResearchState type
+type DocCount = {
+  initial: number;
+  kept: number;
+};
+
 type ResearchState = {
   status: string;
   message: string;
   queries: Query[];
   streamingQueries: Record<string, StreamingQuery>;  // Track queries being typed
   // ... other existing state properties
+  docCounts?: {
+    company: DocCount;
+    industry: DocCount;
+    financial: DocCount;
+    news: DocCount;
+  };
 };
 
 console.log("=== DIRECT CONSOLE TEST ===");
@@ -197,6 +210,11 @@ function App() {
           setError(statusData.error || "Research failed");
           setIsResearching(false);
           setIsComplete(false);
+        } else if (statusData.status === "curation_complete") {
+          setResearchState((prev) => ({
+            ...prev,
+            docCounts: statusData.result.doc_counts
+          }));
         }
       }
     };
@@ -284,6 +302,28 @@ function App() {
       setError(err instanceof Error ? err.message : "Failed to start research");
       setIsResearching(false);
     }
+  };
+
+  // Add document count display component
+  const DocumentStats = ({ docCounts }) => {
+    if (!docCounts) return null;
+
+    return (
+      <div className="glass rounded-xl shadow-lg p-6 mt-4">
+        <h2 className="text-lg font-semibold text-white mb-4">Document Curation Stats</h2>
+        <div className="grid grid-cols-4 gap-4">
+          {Object.entries(docCounts).map(([category, counts]) => (
+            <div key={category} className="text-center">
+              <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+              <div className="text-white">
+                <div className="text-2xl font-bold">{counts.kept}</div>
+                <div className="text-sm text-gray-400">kept from {counts.initial}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -473,30 +513,47 @@ function App() {
               <p className="text-gray-300">{output.summary}</p>
               <div className="mt-4 bg-gray-800/50 p-6 rounded-lg overflow-x-auto border border-gray-700">
                 <ReactMarkdown
-                  className="text-gray-300 prose-ul:list-disc prose-li:ml-4"
+                  rehypePlugins={[rehypeRaw]}
                   components={{
-                    ul: ({ children }) => (
-                      <ul className="list-disc space-y-1 ml-4">{children}</ul>
+                    ul: ({node, ...props}) => (
+                      <ul className="list-disc list-outside ml-5 space-y-1" {...props} />
                     ),
-                    li: ({ children }) => (
-                      <li className="text-gray-300">{children}</li>
+                    li: ({node, ...props}) => (
+                      <li className="text-gray-300" {...props} />
                     ),
-                    h2: ({ children }) => (
-                      <h2 className="text-xl font-semibold text-white mt-8 mb-4">
-                        {children}
-                      </h2>
+                    h1: ({node, ...props}) => (
+                      <h1 className="text-2xl font-bold text-white mt-6 mb-4" {...props} />
                     ),
-                    hr: () => <hr className="border-t border-gray-700 my-4" />,
-                    a: ({ href, children }) => (
-                      <a
+                    h2: ({node, ...props}) => (
+                      <h2 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
+                    ),
+                    hr: ({node, ...props}) => (
+                      <hr className="border-gray-700 my-4" {...props} />
+                    ),
+                    p: ({node, ...props}) => (
+                      <p className="text-gray-300 mb-3" {...props} />
+                    ),
+                    text: ({node, ...props}) => (
+                      <span className="!text-gray-300" {...props} />
+                    ),
+                    strong: ({node, ...props}) => (
+                      <strong className="text-gray-300 font-semibold" {...props} />
+                    ),
+                    pre: ({node, ...props}) => (
+                      <pre className="text-gray-300 bg-transparent" {...props} />
+                    ),
+                    code: ({node, ...props}) => (
+                      <code className="text-gray-300 bg-transparent" {...props} />
+                    ),
+                    a: ({node, href, ...props}) => (
+                      <a 
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 underline"
-                      >
-                        {children}
-                      </a>
-                    ),
+                        className="text-blue-400 hover:text-blue-300"
+                        {...props}
+                      />
+                    )
                   }}
                 >
                   {output.details.report || "No report available"}
@@ -606,6 +663,11 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Document Curation Stats */}
+        {researchState.docCounts && (
+          <DocumentStats docCounts={researchState.docCounts} />
         )}
       </div>
     </div>
