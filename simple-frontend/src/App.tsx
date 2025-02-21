@@ -42,18 +42,19 @@ type DocCount = {
   kept: number;
 };
 
+type DocCounts = {
+  company: DocCount;
+  industry: DocCount;
+  financial: DocCount;
+  news: DocCount;
+};
+
 type ResearchState = {
   status: string;
   message: string;
   queries: Query[];
-  streamingQueries: Record<string, StreamingQuery>;  // Track queries being typed
-  // ... other existing state properties
-  docCounts?: {
-    company: DocCount;
-    industry: DocCount;
-    financial: DocCount;
-    news: DocCount;
-  };
+  streamingQueries: Record<string, StreamingQuery>;
+  docCounts?: DocCounts;
 };
 
 console.log("=== DIRECT CONSOLE TEST ===");
@@ -193,7 +194,52 @@ function App() {
             step: statusData.result?.step || "Processing",
             message: statusData.message || "Processing...",
           });
-          scrollToStatus(); // Add scroll on status update
+          
+          // Initialize doc counts when curation starts
+          if (statusData.result?.step === "Curation" && statusData.result.doc_counts) {
+            setResearchState((prev) => ({
+              ...prev,
+              docCounts: statusData.result.doc_counts as DocCounts
+            }));
+          }
+          
+          scrollToStatus();
+        } else if (statusData.status === "category_start") {
+          // Update initial count for a category
+          const docType = statusData.result?.doc_type as keyof DocCounts;
+          setResearchState((prev) => {
+            if (docType && prev.docCounts) {
+              return {
+                ...prev,
+                docCounts: {
+                  ...prev.docCounts,
+                  [docType]: {
+                    initial: statusData.result.initial_count,
+                    kept: 0
+                  }
+                }
+              };
+            }
+            return prev;
+          });
+        } else if (statusData.status === "document_kept") {
+          // Increment the kept count for the specific category
+          const docType = statusData.result?.doc_type as keyof DocCounts;
+          setResearchState((prev) => {
+            if (docType && prev.docCounts?.[docType]) {
+              return {
+                ...prev,
+                docCounts: {
+                  ...prev.docCounts,
+                  [docType]: {
+                    initial: prev.docCounts[docType].initial,
+                    kept: prev.docCounts[docType].kept + 1
+                  }
+                }
+              };
+            }
+            return prev;
+          });
         } else if (statusData.status === "completed") {
           setIsComplete(true);
           setIsResearching(false);
@@ -503,8 +549,143 @@ function App() {
           </div>
         )}
 
+        {/* Document Curation Stats - Show only during curation */}
+        {isResearching && status?.step === "Curation" && researchState.docCounts && (
+          <div className="glass rounded-xl shadow-lg p-6 mt-4">
+            <h2 className="text-lg font-semibold text-white mb-4">Document Curation Progress</h2>
+            <div className="grid grid-cols-4 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => {
+                const counts = researchState.docCounts?.[category as keyof typeof researchState.docCounts];
+                return (
+                  <div key={category} className="text-center">
+                    <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+                    <div className="text-white">
+                      <div className="text-2xl font-bold">
+                        {counts ? (
+                          <span className="text-blue-400">{counts.kept}</span>
+                        ) : (
+                          <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {counts ? (
+                          `kept from ${counts.initial}`
+                        ) : (
+                          "waiting..."
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Query Display Section */}
+        {researchState.queries.length > 0 && (
+          <div className="glass rounded-xl shadow-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Generated Research Queries
+            </h2>
+            <div className="grid grid-cols-2 gap-6">
+              {/* Company Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">🏢</span>
+                  Company Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "company_analyzer")
+                  .map((query, idx) => (
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("company_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Industry Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">🏭</span>
+                  Industry Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "industry_analyzer")
+                  .map((query, idx) => (
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("industry_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Financial Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">💰</span>
+                  Financial Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "financial_analyzer")
+                  .map((query, idx) => (
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("financial_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* News Analysis */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-gray-400 flex items-center">
+                  <span className="mr-2">📰</span>
+                  News Analysis
+                </h3>
+                {researchState.queries
+                  .filter((q) => q.category === "news_analyzer")
+                  .map((query, idx) => (
+                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                    </div>
+                  ))}
+                {Object.entries(researchState.streamingQueries)
+                  .filter(([key]) => key.startsWith("news_analyzer"))
+                  .map(([key, query]) => (
+                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
+                      <span className="text-gray-400">{query.text}</span>
+                      <span className="animate-pulse ml-1">|</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Output Box */}
-        {output && (
+        {output && output.details && (
           <div className="glass rounded-xl shadow-lg p-6">
             <h2 className="text-lg font-semibold text-white mb-4">
               Research Results
@@ -648,113 +829,6 @@ function App() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* Query Display Section */}
-        {researchState.queries.length > 0 && (
-          <div className="glass rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">
-              Generated Research Queries
-            </h2>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Company Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">🏢</span>
-                  Company Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "company_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("company_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Industry Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">🏭</span>
-                  Industry Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "industry_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("industry_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Financial Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">💰</span>
-                  Financial Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "financial_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("financial_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* News Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">📰</span>
-                  News Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "news_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("news_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Document Curation Stats */}
-        {researchState.docCounts && (
-          <DocumentStats docCounts={researchState.docCounts} />
         )}
       </div>
     </div>

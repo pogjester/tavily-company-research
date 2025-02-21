@@ -111,6 +111,20 @@ class Curator:
                                 }
                             }
                             evaluated_docs.append(evaluated_doc)
+                            
+                            # Send incremental update for kept document
+                            if websocket_manager := state.get('websocket_manager'):
+                                if job_id := state.get('job_id'):
+                                    await websocket_manager.send_status_update(
+                                        job_id=job_id,
+                                        status="document_kept",
+                                        message=f"Kept document: {doc.get('title', 'No title')}",
+                                        result={
+                                            "step": "Curation",
+                                            "doc_type": doc.get('doc_type', 'unknown'),  # Add doc_type to track category
+                                            "title": doc.get('title', 'No title')
+                                        }
+                                    )
                 else:
                     print(f"Skipping document with low Tavily score ({tavily_score:.3f}): {doc.get('title', 'No title')}")
         except Exception as e:
@@ -129,8 +143,16 @@ class Curator:
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="processing",
-                    message=f"Curating research data for {company}",
-                    result={"step": "Curation"}
+                    message=f"Starting document curation for {company}",
+                    result={
+                        "step": "Curation",
+                        "doc_counts": {  # Initialize counts to 0
+                            "company": {"initial": 0, "kept": 0},
+                            "industry": {"initial": 0, "kept": 0},
+                            "financial": {"initial": 0, "kept": 0},
+                            "news": {"initial": 0, "kept": 0}
+                        }
+                    }
                 )
 
         industry = state.get('industry', 'Unknown')
@@ -142,18 +164,17 @@ class Curator:
 
         msg = [f"🔍 Curating research data for {company}"]
         
-
         # Process each type of data with status updates
         data_types = {
-            'financial_data': '💰 Financial',
-            'news_data': '📰 News',
-            'industry_data': '🏭 Industry',
-            'company_data': '🏢 Company'
+            'financial_data': ('💰 Financial', 'financial'),
+            'news_data': ('📰 News', 'news'),
+            'industry_data': ('🏭 Industry', 'industry'),
+            'company_data': ('🏢 Company', 'company')
         }
 
         # Create all evaluation tasks upfront
         curation_tasks = []
-        for data_field, source_type in data_types.items():
+        for data_field, (emoji, doc_type) in data_types.items():
             data = state.get(data_field, {})
             if not data:
                 continue
@@ -170,35 +191,36 @@ class Curator:
                     # Remove tracking parameters
                     clean_url = parsed._replace(query='', fragment='').geturl()
                     
-                    # Use clean URL as key
+                    # Use clean URL as key and add doc_type
                     if clean_url not in unique_docs:
                         doc['url'] = clean_url  # Update doc with clean URL
+                        doc['doc_type'] = doc_type  # Add doc_type for tracking
                         unique_docs[clean_url] = doc
                 except Exception as e:
                     continue
 
             docs = list(unique_docs.values())
-            curation_tasks.append((data_field, source_type, unique_docs.keys(), docs))
+            curation_tasks.append((data_field, emoji, doc_type, unique_docs.keys(), docs))
 
         # Track document counts for each type
         doc_counts = {}
         
         # Process all document types in parallel
         all_top_references = []  # Keep track of all top references with scores
-        for data_field, source_type, urls, docs in curation_tasks:
-            msg.append(f"\n{data_types[data_field]}: Found {len(docs)} documents")
+        for data_field, emoji, doc_type, urls, docs in curation_tasks:
+            msg.append(f"\n{emoji}: Found {len(docs)} documents")
 
-            # Send progress update
+            # Send initial count for this category
             if websocket_manager := state.get('websocket_manager'):
                 if job_id := state.get('job_id'):
                     await websocket_manager.send_status_update(
                         job_id=job_id,
-                        status="processing",
-                        message=f"Evaluating {data_types[data_field]} documents",
+                        status="category_start",
+                        message=f"Processing {doc_type} documents",
                         result={
                             "step": "Curation",
-                            "substep": data_field,
-                            "total_docs": len(docs)
+                            "doc_type": doc_type,
+                            "initial_count": len(docs)
                         }
                     )
 
