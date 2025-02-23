@@ -8,6 +8,8 @@ import {
   Loader2,
   CheckCircle2,
   Github,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from 'rehype-raw';
@@ -145,8 +147,27 @@ function App() {
 
   // Add scroll helper function
   const scrollToStatus = () => {
-    statusRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (statusRef.current) {
+      const yOffset = -100; // Add some padding at the top
+      const y = statusRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
   };
+
+  // Add new state for query section collapse
+  const [isQueriesExpanded, setIsQueriesExpanded] = useState(true);
+  const [shouldShowQueries, setShouldShowQueries] = useState(false);
+  
+  // Add new state for tracking search phase
+  const [isSearchPhase, setIsSearchPhase] = useState(false);
+
+  // Add state for section collapse
+  const [isBriefingExpanded, setIsBriefingExpanded] = useState(true);
+  const [isCurationExpanded, setIsCurationExpanded] = useState(true);
+  const [isEnrichmentExpanded, setIsEnrichmentExpanded] = useState(true);
+
+  // Add state for phase tracking
+  const [currentPhase, setCurrentPhase] = useState<'search' | 'enrichment' | 'briefing' | 'complete' | null>(null);
 
   const connectWebSocket = (jobId: string) => {
     console.log("Initializing WebSocket connection for job:", jobId);
@@ -163,6 +184,97 @@ function App() {
       if (rawData.type === "status_update") {
         const statusData = rawData.data;
         console.log("Status update received:", statusData);
+
+        // Handle phase transitions
+        if (statusData.result?.step) {
+          const step = statusData.result.step;
+          if (step === "Search" && currentPhase !== 'search') {
+            setCurrentPhase('search');
+            setIsSearchPhase(true);
+            setShouldShowQueries(true);
+            setIsQueriesExpanded(true);
+          } else if (step === "Enriching" && currentPhase !== 'enrichment') {
+            setCurrentPhase('enrichment');
+            setIsSearchPhase(false);
+            setIsQueriesExpanded(false);
+            setIsEnrichmentExpanded(true);
+          } else if (step === "Briefing" && currentPhase !== 'briefing') {
+            setCurrentPhase('briefing');
+            setIsEnrichmentExpanded(false);
+            setIsBriefingExpanded(true);
+          }
+        }
+
+        // Handle completion
+        if (statusData.status === "completed") {
+          setCurrentPhase('complete');
+          setIsComplete(true);
+          setIsResearching(false);
+          setOutput({
+            summary: "",
+            details: {
+              report: statusData.result.report,
+            },
+          });
+        }
+
+        // Set search phase when first query starts generating
+        if (statusData.status === "query_generating" && !isSearchPhase) {
+          setIsSearchPhase(true);
+          setShouldShowQueries(true);
+          setIsQueriesExpanded(true);
+        }
+        
+        // End search phase and start enrichment when moving to next step
+        if (statusData.result?.step && statusData.result.step !== "Search") {
+          if (isSearchPhase) {
+            setIsSearchPhase(false);
+            // Add delay before collapsing queries
+            setTimeout(() => {
+              setIsQueriesExpanded(false);
+            }, 1000);
+          }
+          
+          // Handle enrichment phase
+          if (statusData.result.step === "Enriching") {
+            setIsEnrichmentExpanded(true);
+            // Collapse enrichment section when complete
+            if (statusData.status === "enrichment_complete") {
+              setTimeout(() => {
+                setIsEnrichmentExpanded(false);
+              }, 1000);
+            }
+          }
+          
+          // Handle briefing phase
+          if (statusData.result.step === "Briefing") {
+            setIsBriefingExpanded(true);
+            if (statusData.status === "briefing_complete" && statusData.result?.category) {
+              // Update briefing status
+              setResearchState((prev) => {
+                const newBriefingStatus = {
+                  ...prev.briefingStatus,
+                  [statusData.result.category]: true
+                };
+                
+                // Check if all briefings are complete
+                const allBriefingsComplete = Object.values(newBriefingStatus).every(status => status);
+                
+                // Only collapse when all briefings are complete
+                if (allBriefingsComplete) {
+                  setTimeout(() => {
+                    setIsBriefingExpanded(false);
+                  }, 1000);
+                }
+                
+                return {
+                  ...prev,
+                  briefingStatus: newBriefingStatus
+                };
+              });
+            }
+          }
+        }
 
         // Handle enrichment-specific updates
         if (statusData.result?.step === "Enriching") {
@@ -372,15 +484,6 @@ function App() {
           }
           
           scrollToStatus();
-        } else if (statusData.status === "completed") {
-          setIsComplete(true);
-          setIsResearching(false);
-          setOutput({
-            summary: "Research completed",
-            details: {
-              report: statusData.result.report,
-            },
-          });
         } else if (
           statusData.status === "failed" ||
           statusData.status === "error"
@@ -595,6 +698,270 @@ function App() {
   const glassInputStyle = `${glassStyle} pl-10 w-full rounded-lg py-3 px-4 text-white shadow-sm focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-gray-400 bg-white/5`;
   const glassButtonStyle = "w-full mt-6 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:from-blue-500 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm";
 
+  // Function to render progress components in order
+  const renderProgressComponents = () => {
+    const components = [];
+
+    // Research Report (always at the top when available)
+    if (output && output.details) {
+      components.push(
+        <div key="report" className={`${glassCardStyle} transition-all duration-500 ease-in-out transform`}>
+          <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
+            Research Results
+          </h2>
+          <div className="prose prose-invert prose-lg max-w-none">
+            <p className="text-gray-300">{output.summary}</p>
+            <div className={`mt-4 ${glassStyle} rounded-xl p-4 overflow-x-auto`}>
+              <ReactMarkdown
+                rehypePlugins={[rehypeRaw]}
+                components={{
+                  div: ({node, ...props}) => (
+                    <div className="space-y-4 text-gray-200" {...props} />
+                  ),
+                  h1: ({node, ...props}) => (
+                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-6" {...props} />
+                  ),
+                  h2: ({node, ...props}) => (
+                    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 first:mt-2 mt-8 mb-4" {...props} />
+                  ),
+                  h3: ({node, ...props}) => (
+                    <h3 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
+                  ),
+                  p: ({node, children, ...props}) => {
+                    // Check if this paragraph is acting as a subsection header
+                    const text = String(children);
+                    const isSubsectionHeader = (
+                      text.includes('\n') === false && 
+                      text.length < 50 && 
+                      (text.endsWith(':') || /^[A-Z][A-Za-z\s\/]+$/.test(text))
+                    );
+                    
+                    if (isSubsectionHeader) {
+                      return (
+                        <h3 className="text-xl font-semibold text-white mt-6 mb-3">
+                          {text.endsWith(':') ? text.slice(0, -1) : text}
+                        </h3>
+                      );
+                    }
+                    
+                    // Check if this is a bullet point label (often used as mini headers)
+                    const isBulletLabel = text.startsWith('•') && text.includes(':');
+                    if (isBulletLabel) {
+                      const [label, content] = text.split(':');
+                      return (
+                        <div className="text-gray-200 my-2">
+                          <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
+                            {label.replace('•', '').trim()}:
+                          </span>
+                          {content}
+                        </div>
+                      );
+                    }
+                    
+                    return <p className="text-gray-200 my-2" {...props}>{children}</p>;
+                  },
+                  ul: ({node, ...props}) => (
+                    <ul className="text-gray-200 space-y-1 list-disc pl-6" {...props} />
+                  ),
+                  li: ({node, ...props}) => (
+                    <li className="text-gray-200" {...props} />
+                  ),
+                  a: ({node, ...props}) => (
+                    <a className="text-blue-400 hover:text-blue-300 transition-colors" {...props} />
+                  ),
+                }}
+              >
+                {output.details.report || "No report available"}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Current phase component
+    if (currentPhase === 'briefing' || (currentPhase === 'complete' && researchState.briefingStatus)) {
+      components.push(
+        <div key="briefing" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsBriefingExpanded(!isBriefingExpanded)}
+          >
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
+              Research Briefings
+            </h2>
+            <button className="text-gray-400 hover:text-white transition-colors">
+              {isBriefingExpanded ? (
+                <ChevronUp className="h-6 w-6" />
+              ) : (
+                <ChevronDown className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            isBriefingExpanded ? 'mt-4 max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}>
+            <div className="grid grid-cols-4 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => (
+                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                  <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+                  <div className="text-white">
+                    {researchState.briefingStatus[category as keyof BriefingStatus] ? (
+                      <div className="flex items-center justify-center text-green-400">
+                        <CheckCircle2 className="h-6 w-6" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center text-blue-400">
+                        <Loader2 className="animate-spin h-6 w-6" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {!isBriefingExpanded && (
+            <div className="mt-2 text-sm text-gray-400">
+              {Object.values(researchState.briefingStatus).filter(Boolean).length} of {Object.keys(researchState.briefingStatus).length} briefings completed
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (currentPhase === 'enrichment' || currentPhase === 'briefing' || currentPhase === 'complete') {
+      components.push(
+        <div key="enrichment" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsEnrichmentExpanded(!isEnrichmentExpanded)}
+          >
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
+              Content Enrichment Progress
+            </h2>
+            <button className="text-gray-400 hover:text-white transition-colors">
+              {isEnrichmentExpanded ? (
+                <ChevronUp className="h-6 w-6" />
+              ) : (
+                <ChevronDown className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            isEnrichmentExpanded ? 'mt-4 max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}>
+            <div className="grid grid-cols-4 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => {
+                const counts = researchState.enrichmentCounts?.[category as keyof EnrichmentCounts];
+                return (
+                  <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+                    <div className="text-white">
+                      <div className="text-2xl font-bold mb-1">
+                        {counts ? (
+                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-300">
+                            {counts.enriched}
+                          </span>
+                        ) : (
+                          <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {counts ? (
+                          `enriched from ${counts.total}`
+                        ) : (
+                          "waiting..."
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {!isEnrichmentExpanded && researchState.enrichmentCounts && (
+            <div className="mt-2 text-sm text-gray-400">
+              {Object.values(researchState.enrichmentCounts).reduce((acc, curr) => acc + curr.enriched, 0)} documents enriched from {Object.values(researchState.enrichmentCounts).reduce((acc, curr) => acc + curr.total, 0)} total
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Queries are always at the bottom when visible
+    if (shouldShowQueries && (researchState.queries.length > 0 || Object.keys(researchState.streamingQueries).length > 0)) {
+      components.push(
+        <div key="queries" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsQueriesExpanded(!isQueriesExpanded)}
+          >
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
+              Generated Research Queries
+            </h2>
+            <button className="text-gray-400 hover:text-white transition-colors">
+              {isQueriesExpanded ? (
+                <ChevronUp className="h-6 w-6" />
+              ) : (
+                <ChevronDown className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+          
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            isQueriesExpanded ? 'mt-4 max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}>
+            <div className="grid grid-cols-2 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => (
+                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                  <h3 className="text-sm font-medium text-gray-400 flex items-center mb-3">
+                    <span className="mr-2">{
+                      category === 'company' ? '🏢' :
+                      category === 'industry' ? '🏭' :
+                      category === 'financial' ? '💰' : '📰'
+                    }</span>
+                    {category.charAt(0).toUpperCase() + category.slice(1)} Analysis
+                  </h3>
+                  <div className="space-y-2">
+                    {/* Show streaming queries first */}
+                    {Object.entries(researchState.streamingQueries)
+                      .filter(([key]) => key.startsWith(`${category}_analyzer`))
+                      .map(([key, query]) => (
+                        <div key={key} className={`${glassStyle} rounded-lg p-2 border-blue-500/30`}>
+                          <span className="text-gray-300">{query.text}</span>
+                          <span className="animate-pulse ml-1 text-blue-400">|</span>
+                        </div>
+                      ))}
+                    {/* Then show completed queries */}
+                    {researchState.queries
+                      .filter((q) => q.category === `${category}_analyzer`)
+                      .map((query, idx) => (
+                        <div key={idx} className={`${glassStyle} rounded-lg p-2`}>
+                          <span className="text-gray-300">{query.text}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {!isQueriesExpanded && (
+            <div className="mt-2 text-sm text-gray-400">
+              {researchState.queries.length} queries generated across {['company', 'industry', 'financial', 'news'].length} categories
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return components;
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-[#0f1c3f] to-gray-900 p-8">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -619,136 +986,138 @@ function App() {
           </a>
         </div>
 
-        {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className={`${glassCardStyle} space-y-6`}
-        >
-          <div className="space-y-6">
-            {/* Company Name */}
-            <div className="relative">
-              <label
-                htmlFor="companyName"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Company Name *
-              </label>
+        {/* Form Section */}
+        <div className={`${glassCardStyle}`}>
+          <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
+            Research Input
+          </h2>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-6">
+              {/* Company Name */}
               <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  required
-                  id="companyName"
-                  type="text"
-                  value={formData.companyName}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      companyName: e.target.value,
-                    }))
-                  }
-                  className={glassInputStyle}
-                  placeholder="Enter company name"
-                />
+                <label
+                  htmlFor="companyName"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Company Name *
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    required
+                    id="companyName"
+                    type="text"
+                    value={formData.companyName}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        companyName: e.target.value,
+                      }))
+                    }
+                    className={glassInputStyle}
+                    placeholder="Enter company name"
+                  />
+                </div>
+              </div>
+
+              {/* Company URL */}
+              <div>
+                <label
+                  htmlFor="companyUrl"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Company URL
+                </label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    id="companyUrl"
+                    type="url"
+                    value={formData.companyUrl}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        companyUrl: e.target.value,
+                      }))
+                    }
+                    className={glassInputStyle}
+                    placeholder="https://example.com"
+                  />
+                </div>
+              </div>
+
+              {/* Company HQ */}
+              <div>
+                <label
+                  htmlFor="companyHq"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Company HQ
+                </label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    id="companyHq"
+                    type="text"
+                    value={formData.companyHq}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        companyHq: e.target.value,
+                      }))
+                    }
+                    className={glassInputStyle}
+                    placeholder="City, Country"
+                  />
+                </div>
+              </div>
+
+              {/* Company Industry */}
+              <div>
+                <label
+                  htmlFor="companyIndustry"
+                  className="block text-sm font-medium text-gray-300 mb-2"
+                >
+                  Company Industry
+                </label>
+                <div className="relative">
+                  <Factory className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    id="companyIndustry"
+                    type="text"
+                    value={formData.companyIndustry}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        companyIndustry: e.target.value,
+                      }))
+                    }
+                    className={glassInputStyle}
+                    placeholder="e.g. Technology, Healthcare"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Company URL */}
-            <div>
-              <label
-                htmlFor="companyUrl"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Company URL
-              </label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  id="companyUrl"
-                  type="url"
-                  value={formData.companyUrl}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      companyUrl: e.target.value,
-                    }))
-                  }
-                  className={glassInputStyle}
-                  placeholder="https://example.com"
-                />
-              </div>
-            </div>
-
-            {/* Company HQ */}
-            <div>
-              <label
-                htmlFor="companyHq"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Company HQ
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  id="companyHq"
-                  type="text"
-                  value={formData.companyHq}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      companyHq: e.target.value,
-                    }))
-                  }
-                  className={glassInputStyle}
-                  placeholder="City, Country"
-                />
-              </div>
-            </div>
-
-            {/* Company Industry */}
-            <div>
-              <label
-                htmlFor="companyIndustry"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Company Industry
-              </label>
-              <div className="relative">
-                <Factory className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  id="companyIndustry"
-                  type="text"
-                  value={formData.companyIndustry}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      companyIndustry: e.target.value,
-                    }))
-                  }
-                  className={glassInputStyle}
-                  placeholder="e.g. Technology, Healthcare"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isResearching || !formData.companyName}
-            className={glassButtonStyle}
-          >
-            {isResearching ? (
-              <>
-                <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
-                Researching...
-              </>
-            ) : (
-              <>
-                <Search className="-ml-1 mr-2 h-5 w-5" />
-                Start Research
-              </>
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isResearching || !formData.companyName}
+              className={glassButtonStyle}
+            >
+              {isResearching ? (
+                <>
+                  <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" />
+                  Researching...
+                </>
+              ) : (
+                <>
+                  <Search className="-ml-1 mr-2 h-5 w-5" />
+                  Start Research
+                </>
+              )}
+            </button>
+          </form>
+        </div>
 
         {/* Error Message */}
         {error && (
@@ -787,191 +1156,10 @@ function App() {
           </div>
         )}
 
-        {/* Progress Components - Update their styling */}
-        {isResearching && status?.step === "Briefing" && (
-          <div className={glassCardStyle}>
-            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-              Research Briefings
-            </h2>
-            <div className="grid grid-cols-4 gap-4">
-              {['company', 'industry', 'financial', 'news'].map((category) => (
-                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
-                  <div className="text-white">
-                    {researchState.briefingStatus[category as keyof BriefingStatus] ? (
-                      <div className="flex items-center justify-center text-green-400">
-                        <CheckCircle2 className="h-6 w-6" />
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center text-blue-400">
-                        <Loader2 className="animate-spin h-6 w-6" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Document Curation Stats */}
-        {isResearching && status?.step === "Curation" && researchState.docCounts && (
-          <div className={glassCardStyle}>
-            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-              Document Curation Progress
-            </h2>
-            <div className="grid grid-cols-4 gap-4">
-              {['company', 'industry', 'financial', 'news'].map((category) => {
-                const counts = researchState.docCounts?.[category as keyof typeof researchState.docCounts];
-                return (
-                  <div key={category} className={`${glassStyle} rounded-xl p-3`}>
-                    <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
-                    <div className="text-white">
-                      <div className="text-2xl font-bold mb-1">
-                        {counts ? (
-                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-300">
-                            {counts.kept}
-                          </span>
-                        ) : (
-                          <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {counts ? (
-                          `kept from ${counts.initial}`
-                        ) : (
-                          "waiting..."
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Enrichment Progress */}
-        {isResearching && status?.step === "Enriching" && (
-          <div className={glassCardStyle}>
-            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-              Content Enrichment Progress
-            </h2>
-            <div className="grid grid-cols-4 gap-4">
-              {['company', 'industry', 'financial', 'news'].map((category) => {
-                const counts = researchState.enrichmentCounts?.[category as keyof EnrichmentCounts];
-                return (
-                  <div key={category} className={`${glassStyle} rounded-xl p-3`}>
-                    <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
-                    <div className="text-white">
-                      <div className="text-2xl font-bold mb-1">
-                        {counts ? (
-                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-300">
-                            {counts.enriched}
-                          </span>
-                        ) : (
-                          <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {counts ? (
-                          `enriched from ${counts.total}`
-                        ) : (
-                          "waiting..."
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Query Display Section */}
-        {researchState.queries.length > 0 && (
-          <div className={glassCardStyle}>
-            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-              Generated Research Queries
-            </h2>
-            <div className="grid grid-cols-2 gap-4">
-              {['company', 'industry', 'financial', 'news'].map((category) => (
-                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
-                  <h3 className="text-sm font-medium text-gray-400 flex items-center mb-3">
-                    <span className="mr-2">{
-                      category === 'company' ? '🏢' :
-                      category === 'industry' ? '🏭' :
-                      category === 'financial' ? '💰' : '📰'
-                    }</span>
-                    {category.charAt(0).toUpperCase() + category.slice(1)} Analysis
-                  </h3>
-                  <div className="space-y-2">
-                    {researchState.queries
-                      .filter((q) => q.category === `${category}_analyzer`)
-                      .map((query, idx) => (
-                        <div key={idx} className={`${glassStyle} rounded-lg p-2`}>
-                          <span className="text-gray-300">{query.text}</span>
-                        </div>
-                      ))}
-                    {Object.entries(researchState.streamingQueries)
-                      .filter(([key]) => key.startsWith(`${category}_analyzer`))
-                      .map(([key, query]) => (
-                        <div key={key} className={`${glassStyle} rounded-lg p-2`}>
-                          <span className="text-gray-300">{query.text}</span>
-                          <span className="animate-pulse ml-1 text-blue-400">|</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Output Box */}
-        {output && output.details && (
-          <div className={glassCardStyle}>
-            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-              Research Results
-            </h2>
-            <div className="prose prose-invert prose-lg max-w-none">
-              <p className="text-gray-300">{output.summary}</p>
-              <div className={`mt-4 ${glassStyle} rounded-xl p-4 overflow-x-auto`}>
-                <ReactMarkdown
-                  rehypePlugins={[rehypeRaw]}
-                  components={{
-                    div: ({node, ...props}) => (
-                      <div className="space-y-4 text-gray-200" {...props} />
-                    ),
-                    h1: ({node, ...props}) => (
-                      <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-8 mb-4" {...props} />
-                    ),
-                    h2: ({node, ...props}) => (
-                      <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-6 mb-3" {...props} />
-                    ),
-                    h3: ({node, ...props}) => (
-                      <h3 className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-4 mb-2" {...props} />
-                    ),
-                    p: ({node, ...props}) => (
-                      <p className="text-gray-200 my-2" {...props} />
-                    ),
-                    ul: ({node, ...props}) => (
-                      <ul className="text-gray-200 space-y-1 list-disc pl-6" {...props} />
-                    ),
-                    li: ({node, ...props}) => (
-                      <li className="text-gray-200" {...props} />
-                    ),
-                    a: ({node, ...props}) => (
-                      <a className="text-blue-400 hover:text-blue-300 transition-colors" {...props} />
-                    ),
-                  }}
-                >
-                  {output.details.report || "No report available"}
-                </ReactMarkdown>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Progress Components Container */}
+        <div className="space-y-8 transition-all duration-500 ease-in-out">
+          {renderProgressComponents()}
+        </div>
       </div>
     </div>
   );
