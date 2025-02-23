@@ -58,7 +58,7 @@ class CompanyAnalyzer(BaseResearcher):
         try:
             # Store documents with their respective queries
             for query in queries:
-                documents = await self.search_documents([query])
+                documents = await self.search_documents(state, [query])
                 if documents:  # Only process if we got results
                     for url, doc in documents.items():
                         doc['query'] = query  # Associate each document with its query

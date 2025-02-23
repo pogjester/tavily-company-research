@@ -17,11 +17,9 @@ class IndustryAnalyzer(BaseResearcher):
         # Generate search queries using LLM
         queries = await self.generate_queries(state, """
         Generate queries on the industry analysis of {company} in the {industry} industry such as:
-        - Market position and share
-        - Competitive landscape
+        - Market position
+        - Competitors
         - {industry} industry trends and challenges
-        - Key competitors
-        - Regulatory environment
         - Market size and growth
         """)
 
@@ -60,7 +58,7 @@ class IndustryAnalyzer(BaseResearcher):
         try:
             # Store documents with their respective queries
             for query in queries:
-                documents = await self.search_documents([query])
+                documents = await self.search_documents(state, [query])
                 if documents:  # Only process if we got results
                     for url, doc in documents.items():
                         doc['query'] = query  # Associate each document with its query

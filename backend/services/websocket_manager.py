@@ -70,17 +70,5 @@ class WebSocketManager:
                 "result": result
             }
         }
-        logger.info(f"Status: {status}, Message: {message}")
+        #logger.info(f"Status: {status}, Message: {message}")
         await self.broadcast_to_job(job_id, update)
-        
-    async def send_analyst_update(self, job_id: str, analyst: str, queries: list[str]):
-        update = {
-            "type": "analyst_update",
-            "data": {
-                "analyst": analyst,
-                "queries": queries
-            }
-        }
-        logger.info(f"Preparing analyst update for job {job_id}")
-        logger.info(f"Analyst: {analyst}, Queries: {queries}")
-        await self.broadcast_to_job(job_id, update) 

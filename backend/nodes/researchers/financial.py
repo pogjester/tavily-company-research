@@ -13,6 +13,8 @@ class FinancialAnalyst(BaseResearcher):
 
     async def analyze(self, state: ResearchState) -> Dict[str, Any]:
         company = state.get('company', 'Unknown Company')
+        websocket_manager = state.get('websocket_manager')
+        job_id = state.get('job_id')
         
         try:
             # Generate search queries
@@ -32,8 +34,8 @@ class FinancialAnalyst(BaseResearcher):
             state['messages'] = messages
 
             # Send queries through WebSocket
-            if websocket_manager := state.get('websocket_manager'):
-                if job_id := state.get('job_id'):
+            if websocket_manager:
+                if job_id:
                     await websocket_manager.send_status_update(
                         job_id=job_id,
                         status="processing",
@@ -56,7 +58,7 @@ class FinancialAnalyst(BaseResearcher):
                 }
 
             for query in queries:
-                documents = await self.search_documents([query])
+                documents = await self.search_documents(state, [query])
                 for url, doc in documents.items():
                     doc['query'] = query
                     financial_data[url] = doc
@@ -64,15 +66,15 @@ class FinancialAnalyst(BaseResearcher):
             # Final status update
             completion_msg = f"Completed analysis with {len(financial_data)} documents"
             
-            if websocket_manager := state.get('websocket_manager'):
-                if job_id := state.get('job_id'):
+            if websocket_manager:
+                if job_id:
                     await websocket_manager.send_status_update(
                         job_id=job_id,
                         status="processing",
                         message=f"Used Tavily Search to find {len(financial_data)} documents",
                         result={
                             "step": "Search",
-                            "analyst_type": "News Scanner",
+                            "analyst_type": "Financial Analyst",
                             "queries": queries
                         }
                     )
@@ -105,8 +107,8 @@ class FinancialAnalyst(BaseResearcher):
         except Exception as e:
             error_msg = f"Financial analysis failed: {str(e)}"
             # Send error status
-            if websocket_manager := state.get('websocket_manager'):
-                if job_id := state.get('job_id'):
+            if websocket_manager:
+                if job_id:
                     await websocket_manager.send_status_update(
                         job_id=job_id,
                         status="error",

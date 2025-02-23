@@ -57,12 +57,21 @@ type BriefingStatus = {
   news: boolean;
 };
 
+// Add new types for enrichment
+type EnrichmentCounts = {
+  company: { total: number; enriched: number };
+  industry: { total: number; enriched: number };
+  financial: { total: number; enriched: number };
+  news: { total: number; enriched: number };
+};
+
 type ResearchState = {
   status: string;
   message: string;
   queries: Query[];
   streamingQueries: Record<string, StreamingQuery>;
   docCounts?: DocCounts;
+  enrichmentCounts?: EnrichmentCounts;
   briefingStatus: BriefingStatus;
 };
 
@@ -140,10 +149,11 @@ function App() {
   };
 
   const connectWebSocket = (jobId: string) => {
+    console.log("Initializing WebSocket connection for job:", jobId);
     const ws = new WebSocket(`${WS_URL}/research/ws/${jobId}`);
 
     ws.onopen = () => {
-      console.log("WebSocket connected");
+      console.log("WebSocket connection established for job:", jobId);
     };
 
     ws.onmessage = (event) => {
@@ -152,6 +162,125 @@ function App() {
 
       if (rawData.type === "status_update") {
         const statusData = rawData.data;
+        console.log("Status update received:", statusData);
+
+        // Handle enrichment-specific updates
+        if (statusData.result?.step === "Enriching") {
+          console.log("Enrichment status update:", statusData);
+          
+          // Initialize enrichment counts when starting a category
+          if (statusData.status === "category_start") {
+            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            if (category) {
+              setResearchState((prev) => ({
+                ...prev,
+                enrichmentCounts: {
+                  ...prev.enrichmentCounts,
+                  [category]: {
+                    total: statusData.result.count || 0,
+                    enriched: 0
+                  }
+                } as EnrichmentCounts
+              }));
+            }
+          }
+          // Update enriched count when a document is processed
+          else if (statusData.status === "extracted") {
+            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            if (category) {
+              setResearchState((prev) => {
+                const currentCounts = prev.enrichmentCounts?.[category];
+                if (currentCounts) {
+                  return {
+                    ...prev,
+                    enrichmentCounts: {
+                      ...prev.enrichmentCounts,
+                      [category]: {
+                        ...currentCounts,
+                        enriched: currentCounts.enriched + 1
+                      }
+                    } as EnrichmentCounts
+                  };
+                }
+                return prev;
+              });
+            }
+          }
+          // Update final counts when a category is complete
+          else if (statusData.status === "category_complete") {
+            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            if (category) {
+              setResearchState((prev) => ({
+                ...prev,
+                enrichmentCounts: {
+                  ...prev.enrichmentCounts,
+                  [category]: {
+                    total: statusData.result.total || 0,
+                    enriched: statusData.result.enriched || 0
+                  }
+                } as EnrichmentCounts
+              }));
+            }
+          }
+        }
+
+        // Handle curation-specific updates
+        if (statusData.result?.step === "Curation") {
+          console.log("Curation status update:", {
+            status: statusData.status,
+            docCounts: statusData.result.doc_counts
+          });
+          
+          // Initialize doc counts when curation starts
+          if (statusData.status === "processing" && statusData.result.doc_counts) {
+            setResearchState((prev) => ({
+              ...prev,
+              docCounts: statusData.result.doc_counts as DocCounts
+            }));
+          }
+          // Update initial count for a category
+          else if (statusData.status === "category_start") {
+            const docType = statusData.result?.doc_type as keyof DocCounts;
+            if (docType) {
+              setResearchState((prev) => ({
+                ...prev,
+                docCounts: {
+                  ...prev.docCounts,
+                  [docType]: {
+                    initial: statusData.result.initial_count,
+                    kept: 0
+                  } as DocCount
+                } as DocCounts
+              }));
+            }
+          }
+          // Increment the kept count for a specific category
+          else if (statusData.status === "document_kept") {
+            const docType = statusData.result?.doc_type as keyof DocCounts;
+            setResearchState((prev) => {
+              if (docType && prev.docCounts?.[docType]) {
+                return {
+                  ...prev,
+                  docCounts: {
+                    ...prev.docCounts,
+                    [docType]: {
+                      initial: prev.docCounts[docType].initial,
+                      kept: prev.docCounts[docType].kept + 1
+                    }
+                  } as DocCounts
+                };
+              }
+              return prev;
+            });
+          }
+          // Update final doc counts when curation is complete
+          else if (statusData.status === "curation_complete" && statusData.result.doc_counts) {
+            setResearchState((prev) => ({
+              ...prev,
+              docCounts: statusData.result.doc_counts as DocCounts
+            }));
+          }
+        }
 
         // Handle briefing status updates
         if (statusData.status === "briefing_start") {
@@ -221,10 +350,13 @@ function App() {
         // Handle other status updates
         else if (statusData.status === "processing") {
           setIsComplete(false);
-          setStatus({
-            step: statusData.result?.step || "Processing",
-            message: statusData.message || "Processing...",
-          });
+          // Only update status.step if we're not in curation or the new step is curation
+          if (!status?.step || status.step !== "Curation" || statusData.result?.step === "Curation") {
+            setStatus({
+              step: statusData.result?.step || "Processing",
+              message: statusData.message || "Processing...",
+            });
+          }
           
           // Reset briefing status when starting a new research
           if (statusData.result?.step === "Briefing") {
@@ -239,51 +371,7 @@ function App() {
             }));
           }
           
-          // Initialize doc counts when curation starts
-          if (statusData.result?.step === "Curation" && statusData.result.doc_counts) {
-            setResearchState((prev) => ({
-              ...prev,
-              docCounts: statusData.result.doc_counts as DocCounts
-            }));
-          }
-          
           scrollToStatus();
-        } else if (statusData.status === "category_start") {
-          // Update initial count for a category
-          const docType = statusData.result?.doc_type as keyof DocCounts;
-          setResearchState((prev) => {
-            if (docType && prev.docCounts) {
-              return {
-                ...prev,
-                docCounts: {
-                  ...prev.docCounts,
-                  [docType]: {
-                    initial: statusData.result.initial_count,
-                    kept: 0
-                  }
-                }
-              };
-            }
-            return prev;
-          });
-        } else if (statusData.status === "document_kept") {
-          // Increment the kept count for the specific category
-          const docType = statusData.result?.doc_type as keyof DocCounts;
-          setResearchState((prev) => {
-            if (docType && prev.docCounts?.[docType]) {
-              return {
-                ...prev,
-                docCounts: {
-                  ...prev.docCounts,
-                  [docType]: {
-                    initial: prev.docCounts[docType].initial,
-                    kept: prev.docCounts[docType].kept + 1
-                  }
-                }
-              };
-            }
-            return prev;
-          });
         } else if (statusData.status === "completed") {
           setIsComplete(true);
           setIsResearching(false);
@@ -300,27 +388,30 @@ function App() {
           setError(statusData.error || "Research failed");
           setIsResearching(false);
           setIsComplete(false);
-        } else if (statusData.status === "curation_complete") {
-          setResearchState((prev) => ({
-            ...prev,
-            docCounts: statusData.result.doc_counts
-          }));
         }
       }
     };
 
-    ws.onerror = (event) => {
-      console.error("WebSocket error:", event);
-      setError("WebSocket connection error");
-      setIsResearching(false);
-    };
-
     ws.onclose = (event) => {
-      console.log("WebSocket disconnected", event);
+      console.log("WebSocket disconnected", {
+        jobId,
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      });
       if (isResearching) {
         setError("Research connection lost. Please try again.");
         setIsResearching(false);
       }
+    };
+
+    ws.onerror = (event) => {
+      console.error("WebSocket error:", {
+        jobId,
+        error: event
+      });
+      setError("WebSocket connection error");
+      setIsResearching(false);
     };
 
     wsRef.current = ws;
@@ -448,6 +539,51 @@ function App() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Add EnrichmentProgress component
+  const EnrichmentProgress = () => {
+    const categories = [
+      { key: 'company', icon: '🏢', label: 'Company Documents' },
+      { key: 'industry', icon: '🏭', label: 'Industry Documents' },
+      { key: 'financial', icon: '💰', label: 'Financial Documents' },
+      { key: 'news', icon: '📰', label: 'News Documents' }
+    ] as const;
+
+    return (
+      <div className="glass rounded-xl shadow-lg p-6 mt-4">
+        <h2 className="text-lg font-semibold text-white mb-4">Content Enrichment Progress</h2>
+        <div className="grid grid-cols-4 gap-4">
+          {categories.map(({ key, icon, label }) => {
+            const counts = researchState.enrichmentCounts?.[key as keyof EnrichmentCounts];
+            return (
+              <div key={key} className="text-center">
+                <div className="flex items-center justify-center mb-2">
+                  <span className="mr-2">{icon}</span>
+                  <h3 className="text-sm font-medium text-gray-400">{label}</h3>
+                </div>
+                <div className="text-white">
+                  <div className="text-2xl font-bold">
+                    {counts ? (
+                      <span className="text-blue-400">{counts.enriched}</span>
+                    ) : (
+                      <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-400">
+                    {counts ? (
+                      `enriched from ${counts.total}`
+                    ) : (
+                      "waiting..."
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -926,6 +1062,11 @@ function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Add Enrichment Progress component to the UI */}
+        {isResearching && status?.step === "Enriching" && (
+          <EnrichmentProgress />
         )}
       </div>
     </div>

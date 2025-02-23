@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime
 from openai import AsyncOpenAI
 from tavily import AsyncTavilyClient
+from ...classes import ResearchState
 from typing import Dict, Any, List
 import logging
 
@@ -202,7 +203,18 @@ class BaseResearcher:
             logger.error(f"Error searching query '{query}': {e}")
             return {}
 
-    async def search_documents(self, queries: List[str]) -> Dict[str, Any]:
+    async def search_documents(self, state: ResearchState, queries: List[str]) -> Dict[str, Any]:
+        if websocket_manager := state.get('websocket_manager'):
+                if job_id := state.get('job_id'):
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="processing",
+                        message=f"Searching the web with Tavily Search",
+                        result={
+                            "step": "Searching"
+                        }
+                    )
+        
         if not queries:
             logger.error("No valid queries to search")
             return {}
