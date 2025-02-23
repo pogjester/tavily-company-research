@@ -72,7 +72,7 @@ class IndustryAnalyzer(BaseResearcher):
                         status="processing",
                         message=f"Used Tavily Search to find {len(industry_data)} documents",
                         result={
-                            "step": "Search",
+                            "step": "Searching",
                             "analyst_type": "Industry Analyst",
                             "queries": queries
                         }

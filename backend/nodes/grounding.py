@@ -70,7 +70,7 @@ class GroundingNode:
                             await websocket_manager.send_status_update(
                                 job_id=job_id,
                                 status="processing",
-                                message="✅ Successfully extracted content from website",
+                                message="Successfully extracted content from website",
                                 result={"step": "Initial Site Scrape"}
                             )
                 else:
@@ -104,7 +104,7 @@ class GroundingNode:
                     await websocket_manager.send_status_update(
                         job_id=job_id,
                         status="processing",
-                        message="⏩ No company URL provided, proceeding directly to research phase",
+                        message="No company URL provided, proceeding directly to research phase",
                         result={"step": "Initializing"}
                     )
         # Add context about what information we have

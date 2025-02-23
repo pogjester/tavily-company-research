@@ -192,8 +192,23 @@ class Curator:
 
         # Sort references by score and select top 10
         all_top_references.sort(key=lambda x: x[1], reverse=True)
-        top_reference_urls = [url for url, _ in all_top_references[:10]]
-
+        
+        # Use a set to store unique URLs, keeping only the highest scored version of each URL
+        seen_urls = set()
+        unique_references = []
+        for url, score in all_top_references:
+            # Normalize URL by removing trailing slashes and forcing https
+            normalized_url = url.rstrip('/')
+            if not normalized_url.startswith('http'):
+                normalized_url = 'https://' + normalized_url
+            
+            if normalized_url not in seen_urls:
+                seen_urls.add(normalized_url)
+                unique_references.append((normalized_url, score))
+        
+        # Take top 10 unique references
+        top_reference_urls = [url for url, _ in unique_references[:10]]
+        
         # Update state
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))

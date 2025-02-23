@@ -130,6 +130,11 @@ class Editor:
                 logger.error("Initial compilation failed")
                 return ""
 
+            edited_report = await self.content_sweep(state, initial_report, company)
+            if not edited_report:
+                logger.error("Content sweep failed")
+                return ""
+
             # Step 2: Deduplication and Cleanup
             if websocket_manager := state.get('websocket_manager'):
                 if job_id := state.get('job_id'):
@@ -143,16 +148,16 @@ class Editor:
                         }
                     )
 
-            final_report = await self.deduplicate_content(state, initial_report, company)
+            final_report = await self.clean_markdown(state, edited_report, company)
             
             # Ensure final_report is a string before proceeding
             final_report = final_report or ""
             
             # Add references and finalize
             if references := state.get('references', []):
-                reference_lines = ["\n\n## References\n---\n"]
+                reference_lines = ["\n\n## References\n"]
                 for ref in references:
-                    reference_lines.append(f"• [{ref}]({ref})")
+                    reference_lines.append(f"* [{ref}]({ref})")
                 final_report += "\n".join(reference_lines)
             
             # Final step: Standardize markdown format
@@ -175,25 +180,44 @@ class Editor:
     async def compile_content(self, state: ResearchState, briefings: Dict[str, str], company: str) -> str:
         """Initial compilation of research sections."""
         
+        # Don't automatically add ## headers, let the model handle the structure
         combined_content = "\n\n".join(
-            f"## {header.title()}\n{content}"
+            f"{content}"
             for header, content in briefings.items()
         )
         
         prompt = f"""You are compiling a comprehensive research report about {company}.
 
-Original section content:
+Compiled briefings:
 {combined_content}
 
-Create a comprehensive report on {company} that:
-1. Integrates information from all sections into a cohesive narrative
-2. Maintains the most important details from each section
-3. Organizes information logically within each section and removes any transitional commentary / explanations
+Create a comprehensive and focused report on {company} that:
+1. Integrates information from all sections into a cohesive non-repetitive narrative
+2. Maintains important details from each section
+3. Logically organizes information and removes transitional commentary / explanations
 4. Uses clear section headers and structure
-5. Preserves all factual information 
-6. Focuses on {company}
 
-Return the compiled report in perfectly formatted markdown. Do not include any explanatory text."""
+Formatting rules:
+Strictly enforce this EXACT document structure:
+
+# {company} Research Report
+
+## Company Overview
+[Company content with ### subsections]
+
+## Industry Overview
+[Industry content with ### subsections]
+
+## Financial Overview
+[Financial content with ### subsections]
+
+## News
+[News content with ### subsections]
+
+## References
+[Reference links if present]
+
+Return the report in clean markdown format. No explanations or commentary."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)
@@ -220,34 +244,93 @@ Return the compiled report in perfectly formatted markdown. Do not include any e
         except Exception as e:
             logger.error(f"Error in initial compilation: {e}")
             return (combined_content or "").strip()
+        
+    async def content_sweep(self, state: ResearchState, content: str, company: str) -> str:
+        """Sweep the content for any redundant information."""
+        prompt = f"""You are an expert briefing editor. You are given a report on {company}.
 
-    async def deduplicate_content(self, state: ResearchState, content: str, company: str) -> str:
-        """Clean up and deduplicate the compiled report."""
+Current report:
+{content}
+
+
+1. Remove redundant or repetitive information
+2. Remove sections lacking substantial content
+3. Remove any meta-commentary (e.g. "Here is the news...")
+4. Use bullet points (*) for lists
+5. Keep all factual content
+
+Return the cleaned report in flawless markdown format. No explanations or commentary."""
+        
+        try:
+            response = self.gemini_model.generate_content(prompt, stream=True)
+            
+            accumulated_text = ""
+            async for chunk in response:
+                chunk_text = chunk.text
+                accumulated_text += chunk_text
+                
+                if websocket_manager := state.get('websocket_manager'):
+                    if job_id := state.get('job_id'):
+                        await websocket_manager.send_status_update(
+                            job_id=job_id,
+                            status="report_chunk",
+                            message="Editing final report",
+                            result={
+                                "chunk": chunk_text,
+                                "step": "Editor"
+                            }
+                        )
+            
+            return (accumulated_text or "").strip()
+        except Exception as e:
+            logger.error(f"Error in editing: {e}")
+            return (content or "").strip()
+
+    async def clean_markdown(self, state: ResearchState, content: str, company: str) -> str:
+        """Clean up and format in markdown."""
         
         prompt = f"""You are an expert markdown editor. You are given a report on {company}.
 
 Current report:
 {content}
 
-Create a refined version that follows these EXACT markdown formatting rules:
-1. Main title should use a single # (e.g. "# Company Research Report")
-2. All section headers should use ## without any horizontal rules (e.g. "## Company Overview")
-3. All subsections should use ### (e.g. "### Core Products")
-4. Use * consistently for all bullet points (never use • or -)
-5. Add a blank line before and after each section and subsection header
-6. Ensure consistent indentation for bullet points
-7. Use bold (**text**) for emphasis, not italics
-8. Keep one blank line between bullet points for readability
-9. References should be properly formatted as markdown links
+Instructions:
+Strictly enforce this EXACT document structure:
 
-Additionally:
-1. Remove any redundant information
-2. Improve flow and readability
-3. Remove sections lacking substantial content
-4. Remove transitional commentary / explanations that an LLM might have added.
-5. Ensure perfect markdown syntax
+# {company} Research Report
 
-Return the polished report in flawless markdown format. Provide no explanations or commentary."""
+## Company Overview
+[Company content with ### subsections]
+
+## Industry Overview
+[Industry content with ### subsections]
+
+## Financial Overview
+[Financial content with ### subsections]
+
+## News
+[News content with ### subsections]
+
+## References
+[Reference links if present]
+
+Critical rules:
+1. The document MUST start with "# {company} Research Report"
+2. The document MUST ONLY use these exact ## headers in this order:
+   - ## Company Overview
+   - ## Industry Overview
+   - ## Financial Overview
+   - ## News
+   - ## References (if present)
+3. NO OTHER ## HEADERS ARE ALLOWED
+4. Use ### for subsections in Company/Industry/Financial sections
+5. News section should only use bullet points (*), never headers
+6. Never use code blocks (```)
+7. Never use more than one blank line between sections
+8. Format all bullet points with *
+9. Add one blank line before and after each section/list
+
+Return the polished report in flawless markdown format. No explanation."""
 
         try:
             response = self.gemini_model.generate_content(prompt, stream=True)
@@ -262,7 +345,7 @@ Return the polished report in flawless markdown format. Provide no explanations 
                         await websocket_manager.send_status_update(
                             job_id=job_id,
                             status="report_chunk",
-                            message="Polishing final report",
+                            message="Formatting final report",
                             result={
                                 "chunk": chunk_text,
                                 "step": "Editor"
@@ -271,7 +354,7 @@ Return the polished report in flawless markdown format. Provide no explanations 
             
             return (accumulated_text or "").strip()
         except Exception as e:
-            logger.error(f"Error in deduplication: {e}")
+            logger.error(f"Error in formatting: {e}")
             return (content or "").strip()
 
     async def run(self, state: ResearchState) -> ResearchState:

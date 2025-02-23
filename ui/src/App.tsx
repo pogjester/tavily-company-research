@@ -264,7 +264,7 @@ function App() {
                 if (allBriefingsComplete) {
                   setTimeout(() => {
                     setIsBriefingExpanded(false);
-                  }, 1000);
+                  }, 2000);
                 }
                 
                 return {
@@ -631,7 +631,7 @@ function App() {
               </div>
               <div className="text-white">
                 {researchState.briefingStatus[key] ? (
-                  <div className="flex items-center justify-center text-green-400">
+                  <div className="flex items-center justify-center text-blue-400">
                     <CheckCircle2 className="h-6 w-6" />
                   </div>
                 ) : (
@@ -722,7 +722,7 @@ function App() {
                     <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-6" {...props} />
                   ),
                   h2: ({node, ...props}) => (
-                    <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 first:mt-2 mt-8 mb-4" {...props} />
+                    <h2 className="text-3xl font-bold text-white first:mt-2 mt-8 mb-4" {...props} />
                   ),
                   h3: ({node, ...props}) => (
                     <h3 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
@@ -808,7 +808,7 @@ function App() {
                   <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
                   <div className="text-white">
                     {researchState.briefingStatus[category as keyof BriefingStatus] ? (
-                      <div className="flex items-center justify-center text-green-400">
+                      <div className="flex items-center justify-center text-blue-400">
                         <CheckCircle2 className="h-6 w-6" />
                       </div>
                     ) : (
@@ -1137,7 +1137,7 @@ function App() {
                 <div className="flex-shrink-0">
                   {isComplete ? (
                     <div className={`${glassStyle} p-2 rounded-full`}>
-                      <CheckCircle2 className="h-6 w-6 text-green-400" />
+                      <CheckCircle2 className="h-6 w-6 text-blue-400" />
                     </div>
                   ) : (
                     <div className={`${glassStyle} p-2 rounded-full`}>

@@ -50,86 +50,96 @@ Key requirements:
 1. Start with: "{company} is a [what] that [does what] for [whom]"
 2. Structure using these exact headers and bullet points:
 
-Core Product/Service
-• List distinct products/features
-• Include only verified technical capabilities
+### Core Product/Service
+* List distinct products/features
+* Include only verified technical capabilities
 
-Target Market
-• List specific target audiences
-• List verified use cases
-• List confirmed customers/partners
+### Leadership Team
+* List key leadership team members
+* Include their roles and expertise
 
-Key Differentiators
-• List unique features
-• List proven advantages
+### Target Market
+* List specific target audiences
+* List verified use cases
+* List confirmed customers/partners
 
-Business Model
-• Discuss product / service pricing
-• List distribution channels
+### Key Differentiators
+* List unique features
+* List proven advantages
+
+### Business Model
+* Discuss product / service pricing
+* List distribution channels
 
 3. Each bullet must be a single, complete fact
-4. No paragraphs, only bullet points
-5. No explanations or commentary.""",
+4. Never mention "no information found" or "no data available"
+5. No paragraphs, only bullet points
+6. Provide only the briefing. No explanations or commentary.""",
 
             'industry': f"""Analyze {company}'s market position.
 Key requirements:
 1. Structure using these exact headers and bullet points:
 
-Market Overview
-• State {company}'s exact market segment
-• List market size with year
-• List growth rate with year range
+### Market Overview
+* State {company}'s exact market segment
+* List market size with year
+* List growth rate with year range
 
-Direct Competition
-• List named direct competitors
-• List specific competing products
-• List market positions
+### Direct Competition
+* List named direct competitors
+* List specific competing products
+* List market positions
 
-Competitive Advantages
+### Competitive Advantages
 • List unique technical features
 • List proven advantages
 
-Market Challenges
+### Market Challenges
 • List specific verified challenges
 
 2. Each bullet must be a single, complete news event.
 3. No paragraphs, only bullet points
-4. No explanations or commentary.""",
+4. Never mention "no information found" or "no data available"
+5. Provide only the briefing. No explanation.""",
 
-            'financial': f"""List {company}'s financial data.
+            'financial': f"""List {company}'s financial information.
 Key requirements:
 1. Structure using these headers and bullet points:
 
-Funding & Investment
-• Total funding amount with date
-• List each funding round with date
-• List named investors
+### Funding & Investment
+* Total funding amount with date
+* List each funding round with date
+* List named investors
 
-Revenue Model
-• Discuss product / service pricing if applicable
+### Revenue Model
+* Discuss product / service pricing if applicable
 
 2. Include specific numbers when possible
 3. No paragraphs, only bullet points
-4. Never provide explanations or commentary.""",
+4. Never mention "no information found" or "no data available"
+5. Provide only the briefing. No explanation or commentary.""",
 
             'news': f"""List verified {company} news.
 Key requirements:
-1. Structure into these categories:
-   - Major Announcements
-     • Product / service launches
-     • New initiatives
-   
-   - Partnerships
-     • Integrations
-     • Collaborations
-   
-   - Recognition
-     • Awards
-     • Press coverage
+1. Structure into these categories using bullet points:
+
+### Major Announcements
+* Product / service launches
+* New initiatives
+
+### Partnerships
+* Integrations
+* Collaborations
+
+### Recognition
+* Awards
+* Press coverage
 
 2. Sort newest to oldest
 3. One event per bullet point
-4. Never provide explanations or commentary like "Here is the news..."."""
+4. Do not mention "no information found" or "no data available"
+5. Never use ### headers, only bullet points
+6. Provide only the briefing. Do not provide explanations or commentary.""",
         }
         
         # Normalize docs to a list of (url, doc) tuples
@@ -160,11 +170,11 @@ Key requirements:
         separator = "\n" + "-" * 40 + "\n"
         prompt = f"""{prompts.get(category, 'Create an informative and insightful research briefing on {company} in the {industry} industry based on the provided documents.')}
 
-Analyze the following documents and extract key information:
+Analyze the following documents and extract key information. Provide only the briefing, no explanations or commentary:
 
 {separator}{separator.join(doc_texts)}{separator}
 
-Create a concise briefing with factual, verifiable information without introductions or conclusions. Never provide explanations or additional commentary. Never say "Okay here is..." or anything like that. Just provide the briefing."""
+"""
         
         try:
             logger.info("Sending prompt to LLM")

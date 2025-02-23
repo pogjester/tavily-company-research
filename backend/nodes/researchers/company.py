@@ -72,7 +72,7 @@ class CompanyAnalyzer(BaseResearcher):
                         status="processing",
                         message=f"Used Tavily Search to find {len(company_data)} documents",
                         result={
-                            "step": "Search",
+                            "step": "Searching",
                             "analyst_type": "Company Analyst",
                             "queries": queries
                         }
