@@ -115,6 +115,9 @@ The platform implements a WebSocket-based real-time communication system:
 - API Keys:
   - Tavily API Key
   - Google Gemini API Key
+  - OpenAI API Key (for GPT-4)
+- Optional:
+  - MongoDB URI (for result persistence)
 
 ### Installation
 
@@ -145,7 +148,32 @@ npm install
 ```env
 TAVILY_API_KEY=your_tavily_key
 GEMINI_API_KEY=your_gemini_key
+OPENAI_API_KEY=your_openai_key
+
+# Optional: Enable MongoDB persistence
+# MONGODB_URI=your_mongodb_connection_string
 ```
+
+### Database Configuration (Optional)
+
+The platform can optionally use MongoDB to persist research results and reports:
+
+1. **Without MongoDB**: 
+   - The application runs in-memory only
+   - Research results are available only during the session
+   - Historical reports cannot be retrieved after server restart
+
+2. **With MongoDB**:
+   - Set `MONGODB_URI` in your `.env` file
+   - Research results and reports are persisted
+   - Historical reports can be retrieved via API endpoints:
+     - GET `/research/{job_id}`: Retrieve job details
+     - GET `/research/{job_id}/report`: Retrieve report content
+
+To set up MongoDB:
+1. Create a MongoDB database (local or cloud)
+2. Get your connection string
+3. Add to `.env`: `MONGODB_URI=your_connection_string`
 
 ## Usage 💡
 

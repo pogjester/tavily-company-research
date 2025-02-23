@@ -73,8 +73,12 @@ job_status = defaultdict(lambda: {
 
 # Initialize MongoDB service if URI is provided
 mongodb = None
-if os.getenv("MONGODB_URI"):
-    mongodb = MongoDBService(os.getenv("MONGODB_URI"))
+if mongo_uri := os.getenv("MONGODB_URI"):
+    try:
+        mongodb = MongoDBService(mongo_uri)
+        logger.info("MongoDB integration enabled")
+    except Exception as e:
+        logger.warning(f"Failed to initialize MongoDB: {e}. Continuing without persistence.")
 
 class ResearchRequest(BaseModel):
     company: str
@@ -210,6 +214,8 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
 @app.get("/research/{job_id}")
 async def get_research(job_id: str):
     """Retrieve research results by job ID."""
+    if not mongodb:
+        raise HTTPException(status_code=501, detail="Database persistence not configured")
     job = mongodb.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Research job not found")
@@ -218,6 +224,8 @@ async def get_research(job_id: str):
 @app.get("/research/{job_id}/report")
 async def get_research_report(job_id: str):
     """Retrieve research report by job ID."""
+    if not mongodb:
+        raise HTTPException(status_code=501, detail="Database persistence not configured")
     report = mongodb.get_report(job_id)
     if not report:
         raise HTTPException(status_code=404, detail="Research report not found")

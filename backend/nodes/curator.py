@@ -197,6 +197,19 @@ class Curator:
         seen_urls = set()
         unique_references = []
         for url, score in all_top_references:
+            # Only include references from company, financial, and news data
+            doc_type = next((doc.get('doc_type') for doc in [
+                doc for docs in [
+                    state.get('curated_company_data', {}).values(),
+                    state.get('curated_financial_data', {}).values(),
+                    state.get('curated_news_data', {}).values()
+                ] for doc in docs
+            ] if doc.get('url') == url), None)
+            
+            # Skip if not from relevant categories
+            if not doc_type:
+                continue
+            
             # Normalize URL by removing trailing slashes and forcing https
             normalized_url = url.rstrip('/')
             if not normalized_url.startswith('http'):

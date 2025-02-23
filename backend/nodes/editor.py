@@ -295,9 +295,6 @@ Strictly enforce this EXACT document structure:
 ## News
 [News content with ### subsections]
 
-## References
-[Reference links if present]
-
 Critical rules:
 1. The document MUST start with "# {company} Research Report"
 2. The document MUST ONLY use these exact ## headers in this order:
@@ -305,7 +302,6 @@ Critical rules:
    - ## Industry Overview
    - ## Financial Overview
    - ## News
-   - ## References (if present)
 3. NO OTHER ## HEADERS ARE ALLOWED
 4. Use ### for subsections in Company/Industry/Financial sections
 5. News section should only use bullet points (*), never headers
