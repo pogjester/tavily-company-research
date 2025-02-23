@@ -12,25 +12,32 @@ logger = logging.getLogger(__name__)
 
 def clean_text(text: str) -> str:
     """Clean up text by replacing escaped quotes and other special characters."""
+    # Remove any trailing JSON artifacts
+    text = re.sub(r'",?\s*"pdf_url":.+$', '', text)
     # Replace escaped quotes with regular quotes
     text = text.replace('\\"', '"')
-    # Clean up any trailing quotes and commas from JSON artifacts
-    text = re.sub(r'[",]+$', '', text)
     # Replace multiple spaces with single space
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
 def extract_link_info(line: str) -> tuple[str, str]:
     """Extract title and URL from markdown link."""
-    match = re.match(r'\[(.*?)\]\((.*?)\)', line)
-    if match:
-        title = clean_text(match.group(1))
-        url = clean_text(match.group(2))
-        # If the title is a URL and matches the URL, just use the URL
-        if title.startswith('http') and title == url:
-            return url, url
-        return title, url
-    return '', ''
+    try:
+        # First clean any JSON artifacts that might interfere with link parsing
+        line = re.sub(r'",?\s*"pdf_url":.+$', '', line)
+        match = re.match(r'\[(.*?)\]\((.*?)\)', line)
+        if match:
+            title = clean_text(match.group(1))
+            url = clean_text(match.group(2))
+            # If the title is a URL and matches the URL, just use the URL
+            if title.startswith('http') and title == url:
+                return url, url
+            return title, url
+        logger.debug(f"No link match found in line: {line}")
+        return '', ''
+    except Exception as e:
+        logger.error(f"Error extracting link info from line: {line}, error: {str(e)}")
+        return '', ''
 
 def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
     """Convert markdown content to PDF using reportlab."""
