@@ -15,7 +15,7 @@ class Enricher:
         self.tavily_client = AsyncTavilyClient(api_key=tavily_key)
         self.batch_size = 20
 
-    async def fetch_single_content(self, url: str, websocket_manager=None, job_id=None) -> Dict[str, str]:
+    async def fetch_single_content(self, url: str, websocket_manager=None, job_id=None, category=None) -> Dict[str, str]:
         """Fetch raw content for a single URL."""
         try:
             if websocket_manager and job_id:
@@ -25,7 +25,8 @@ class Enricher:
                     message=f"Extracting content from {url}",
                     result={
                         "step": "Enriching",
-                        "url": url
+                        "url": url,
+                        "category": category
                     }
                 )
 
@@ -39,6 +40,7 @@ class Enricher:
                         result={
                             "step": "Enriching",
                             "url": url,
+                            "category": category,
                             "success": True
                         }
                     )
@@ -53,35 +55,59 @@ class Enricher:
                     result={
                         "step": "Enriching",
                         "url": url,
+                        "category": category,
                         "success": False,
                         "error": str(e)
                     }
                 )
         return {url: ''}
 
-    async def fetch_raw_content(self, urls: List[str], websocket_manager=None, job_id=None) -> Dict[str, str]:
+    async def fetch_raw_content(self, urls: List[str], websocket_manager=None, job_id=None, category=None) -> Dict[str, str]:
         """Fetch raw content for multiple URLs in parallel."""
         raw_contents = {}
         total_batches = (len(urls) + self.batch_size - 1) // self.batch_size
 
-        for batch_num, i in enumerate(range(0, len(urls), self.batch_size), 1):
-            if websocket_manager and job_id:
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="batch_start",
-                    message=f"Processing batch {batch_num}/{total_batches}",
-                    result={
-                        "step": "Enriching",
-                        "batch": batch_num,
-                        "total_batches": total_batches
-                    }
-                )
+        # Create batches
+        batches = [urls[i:i + self.batch_size] for i in range(0, len(urls), self.batch_size)]
+        
+        # Process batches in parallel with rate limiting
+        semaphore = asyncio.Semaphore(3)  # Limit concurrent batches to 3
+        
+        async def process_batch(batch_num: int, batch_urls: List[str]) -> Dict[str, str]:
+            async with semaphore:
+                if websocket_manager and job_id:
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="batch_start",
+                        message=f"Processing batch {batch_num + 1}/{total_batches}",
+                        result={
+                            "step": "Enriching",
+                            "batch": batch_num + 1,
+                            "total_batches": total_batches,
+                            "category": category
+                        }
+                    )
 
-            batch_urls = urls[i:i + self.batch_size]
-            tasks = [self.fetch_single_content(url, websocket_manager, job_id) for url in batch_urls]
-            results = await asyncio.gather(*tasks)
-            for result in results:
-                raw_contents.update(result)
+                # Process URLs in batch concurrently
+                tasks = [self.fetch_single_content(url, websocket_manager, job_id, category) for url in batch_urls]
+                results = await asyncio.gather(*tasks)
+                
+                # Combine results from batch
+                batch_contents = {}
+                for result in results:
+                    batch_contents.update(result)
+                
+                return batch_contents
+
+        # Process all batches
+        batch_results = await asyncio.gather(*[
+            process_batch(i, batch) 
+            for i, batch in enumerate(batches)
+        ])
+
+        # Combine results from all batches
+        for batch_result in batch_results:
+            raw_contents.update(batch_result)
 
         return raw_contents
 
@@ -106,16 +132,15 @@ class Enricher:
 
         # Process each type of curated data
         data_types = {
-            'financial_data': '💰 Financial',
-            'news_data': '📰 News',
-            'industry_data': '🏭 Industry',
-            'company_data': '🏢 Company'
+            'financial_data': ('💰 Financial', 'financial'),
+            'news_data': ('📰 News', 'news'),
+            'industry_data': ('🏭 Industry', 'industry'),
+            'company_data': ('🏢 Company', 'company')
         }
 
-        total_enriched = 0
-        total_documents = 0
-
-        for data_field, label in data_types.items():
+        # Create tasks for parallel processing
+        enrichment_tasks = []
+        for data_field, (label, category) in data_types.items():
             curated_field = f'curated_{data_field}'
             curated_docs = state.get(curated_field, {})
             
@@ -131,7 +156,6 @@ class Enricher:
                 msg.append(f"\n• All {label} documents already have raw content")
                 continue
             
-            total_documents += len(docs_needing_content)
             msg.append(f"\n• Enriching {len(docs_needing_content)} {label} documents...")
 
             if websocket_manager and job_id:
@@ -141,56 +165,77 @@ class Enricher:
                     message=f"Processing {label} documents",
                     result={
                         "step": "Enriching",
-                        "category": data_field,
+                        "category": category,
                         "count": len(docs_needing_content)
                     }
                 )
-            
-            # Fetch raw content for documents
-            raw_contents = await self.fetch_raw_content(
-                list(docs_needing_content.keys()),
-                websocket_manager,
-                job_id
-            )
-            
-            # Update documents with raw content
-            enriched_count = 0
-            for url, raw_content in raw_contents.items():
-                if raw_content:
-                    curated_docs[url]['raw_content'] = raw_content
-                    enriched_count += 1
-            
-            total_enriched += enriched_count
-            
-            # Update state with enriched documents
-            state[curated_field] = curated_docs
-            msg.append(f"  ✓ Successfully enriched {enriched_count}/{len(docs_needing_content)} documents")
 
+            # Create task for this category
+            enrichment_tasks.append({
+                'field': curated_field,
+                'category': category,
+                'label': label,
+                'docs': docs_needing_content,
+                'curated_docs': curated_docs
+            })
+
+        # Process all categories in parallel
+        if enrichment_tasks:
+            async def process_category(task):
+                raw_contents = await self.fetch_raw_content(
+                    list(task['docs'].keys()),
+                    websocket_manager,
+                    job_id,
+                    task['category']
+                )
+                
+                enriched_count = 0
+                for url, raw_content in raw_contents.items():
+                    if raw_content:
+                        task['curated_docs'][url]['raw_content'] = raw_content
+                        enriched_count += 1
+
+                # Update state with enriched documents
+                state[task['field']] = task['curated_docs']
+                
+                if websocket_manager and job_id:
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="category_complete",
+                        message=f"Completed {task['label']} documents",
+                        result={
+                            "step": "Enriching",
+                            "category": task['category'],
+                            "enriched": enriched_count,
+                            "total": len(task['docs'])
+                        }
+                    )
+                
+                return {
+                    'category': task['category'],
+                    'enriched': enriched_count,
+                    'total': len(task['docs'])
+                }
+
+            # Process all categories in parallel
+            results = await asyncio.gather(*[process_category(task) for task in enrichment_tasks])
+            
+            # Calculate totals
+            total_enriched = sum(r['enriched'] for r in results)
+            total_documents = sum(r['total'] for r in results)
+
+            # Send final status update
             if websocket_manager and job_id:
                 await websocket_manager.send_status_update(
                     job_id=job_id,
-                    status="category_complete",
-                    message=f"Completed {label} documents",
+                    status="enrichment_complete",
+                    message=f"Content enrichment complete. Successfully enriched {total_enriched}/{total_documents} documents",
                     result={
                         "step": "Enriching",
-                        "category": data_field,
-                        "enriched": enriched_count,
-                        "total": len(docs_needing_content)
+                        "total_enriched": total_enriched,
+                        "total_documents": total_documents
                     }
                 )
-
-        # Send final status update
-        if websocket_manager and job_id:
-            await websocket_manager.send_status_update(
-                job_id=job_id,
-                status="enrichment_complete",
-                message=f"Content enrichment complete. Successfully enriched {total_enriched}/{total_documents} documents",
-                result={
-                    "step": "Enriching",
-                    "total_enriched": total_enriched,
-                    "total_documents": total_documents
-                }
-            )
 
         # Update state with enrichment message
         messages = state.get('messages', [])

@@ -12,7 +12,6 @@ from .nodes.curator import Curator
 from .nodes.enricher import Enricher
 from .nodes.briefing import Briefing
 from .nodes.editor import Editor
-from .nodes.output import OutputNode
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,6 @@ class Graph:
         self.enricher = Enricher()
         self.briefing = Briefing()
         self.editor = Editor()
-        self.output = OutputNode()
 
     def _build_workflow(self):
         """Configure the state graph workflow"""
@@ -68,11 +66,10 @@ class Graph:
         self.workflow.add_node("enricher", self.enricher.run)
         self.workflow.add_node("briefing", self.briefing.run)
         self.workflow.add_node("editor", self.editor.run)
-        self.workflow.add_node("output", self.output.run)
 
         # Configure workflow edges
         self.workflow.set_entry_point("grounding")
-        self.workflow.set_finish_point("output")
+        self.workflow.set_finish_point("editor")
         
         research_nodes = [
             "financial_analyst", 
@@ -91,7 +88,6 @@ class Graph:
         self.workflow.add_edge("curator", "enricher")
         self.workflow.add_edge("enricher", "briefing")
         self.workflow.add_edge("briefing", "editor")
-        self.workflow.add_edge("editor", "output")
 
     async def run(self, thread: Dict[str, Any]) -> AsyncIterator[Dict[str, Any]]:
         """Execute the research workflow"""

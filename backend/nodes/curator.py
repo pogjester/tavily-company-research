@@ -197,36 +197,36 @@ class Curator:
         seen_urls = set()
         unique_references = []
         for url, score in all_top_references:
-            # Only include references from company, financial, and news data
-            doc_type = next((doc.get('doc_type') for doc in [
-                doc for docs in [
-                    state.get('curated_company_data', {}).values(),
-                    state.get('curated_financial_data', {}).values(),
-                    state.get('curated_news_data', {}).values()
-                ] for doc in docs
-            ] if doc.get('url') == url), None)
-            
-            # Skip if not from relevant categories
-            if not doc_type:
+            # Skip if URL is not valid
+            if not url or not url.startswith(('http://', 'https://')):
                 continue
-            
-            # Normalize URL by removing trailing slashes and forcing https
-            normalized_url = url.rstrip('/')
-            if not normalized_url.startswith('http'):
-                normalized_url = 'https://' + normalized_url
-            
-            if normalized_url not in seen_urls:
-                seen_urls.add(normalized_url)
-                unique_references.append((normalized_url, score))
+
+
+            # Normalize URL by removing trailing slashes and query parameters
+            try:
+                parsed = urlparse(url)
+                normalized_url = parsed._replace(query='', fragment='').geturl().rstrip('/')
+                if not normalized_url.startswith('http'):
+                    normalized_url = 'https://' + normalized_url
+                
+                if normalized_url not in seen_urls:
+                    seen_urls.add(normalized_url)
+                    unique_references.append((normalized_url, score))
+            except Exception as e:
+                logger.error(f"Error normalizing URL {url}: {e}")
+                continue
         
-        # Take top 10 unique references
+        # Take exactly 10 unique references (or all if less than 10)
         top_reference_urls = [url for url, _ in unique_references[:10]]
         
-        # Update state
+        # Log the number of references found
+        logger.info(f"Found {len(top_reference_urls)} unique references")
+        
+        # Update state with references
         messages = state.get('messages', [])
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
-        state['references'] = list(top_reference_urls)
+        state['references'] = top_reference_urls
 
         # Send final curation stats
         if websocket_manager := state.get('websocket_manager'):

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -14,43 +14,20 @@ import asyncio
 import uuid
 from collections import defaultdict
 from backend.services.mongodb import MongoDBService
+from contextlib import asynccontextmanager
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
 load_dotenv()
 
-# Ensure reports directory exists
 REPORTS_DIR = "reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
-# Initialize FastAPI application
-app = FastAPI(title="Tavily Company Research API")
-
-# Enable CORS - Explicitly allow frontend origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5174",
-        "http://localhost:5173",
-        "https://tavily-company-research-65wtjfqzu-pogjesters-projects.vercel.app"
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
-
-@app.on_event("startup")
-async def startup_event():
-    """Runs when the application starts."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     logger.info("Starting up Tavily Company Research API")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Runs when the application is shutting down."""
+    yield
     logger.info("Shutting down Tavily Company Research API")
     for job_connections in manager.active_connections.values():
         for connection in job_connections:
@@ -59,19 +36,29 @@ async def shutdown_event():
             except Exception:
                 pass
 
-# Initialize WebSocket manager
+app = FastAPI(title="Tavily Company Research API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5174", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
+
 manager = WebSocketManager()
 
-# Store research results and job status in memory
 job_status = defaultdict(lambda: {
     "status": "pending",
     "result": None,
     "error": None,
     "debug_info": [],
+    "company": None,
+    "report": None,
     "last_update": datetime.now().isoformat()
 })
 
-# Initialize MongoDB service if URI is provided
 mongodb = None
 if mongo_uri := os.getenv("MONGODB_URI"):
     try:
@@ -88,7 +75,6 @@ class ResearchRequest(BaseModel):
 
 @app.options("/research")
 async def preflight():
-    """Handle CORS preflight requests explicitly."""
     response = JSONResponse(content=None, status_code=200)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
@@ -97,7 +83,6 @@ async def preflight():
 
 @app.post("/research")
 async def research(data: ResearchRequest):
-    """Start a new research job."""
     try:
         logger.info(f"Received research request for {data.company}")
         job_id = str(uuid.uuid4())
@@ -109,12 +94,9 @@ async def research(data: ResearchRequest):
             "message": "Research started. Connect to WebSocket for updates.",
             "websocket_url": f"/research/ws/{job_id}"
         })
-        
-        # Add CORS headers manually
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-
         return response
 
     except Exception as e:
@@ -122,7 +104,6 @@ async def research(data: ResearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 async def process_research(job_id: str, data: ResearchRequest):
-    """Background task to process research request."""
     try:
         if mongodb:
             mongodb.create_job(job_id, data.dict())
@@ -139,45 +120,55 @@ async def process_research(job_id: str, data: ResearchRequest):
             job_id=job_id
         )
 
-        results = []
         state = {}
-
         async for s in graph.run(thread={}):
             state.update(s)
-            if messages := state.get('messages', []):
-                results.append(messages[-1].content)
-
-        report_content = state.get('output', {}).get('report', '')
-
-        if not report_content.strip():
-            raise Exception("No report content generated")
-
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        pdf_filename = f"{data.company.replace(' ', '_')}_{timestamp}.pdf"
-        pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
-
-        generate_pdf_from_md(report_content, pdf_path)
-
-        final_result = {
-            "results": results,
-            "report": report_content,
-            "pdf_url": f"/research/pdf/{pdf_filename}",
-        }
-
-        await manager.send_status_update(job_id, status="completed", message="Research completed", result=final_result)
-
-        if mongodb:
-            mongodb.update_job(job_id=job_id, status="completed")
-            mongodb.store_report(job_id=job_id, report_data=final_result)
+        
+        # Look for the compiled report in either location.
+        report_content = state.get('report') or (state.get('editor') or {}).get('report')
+        if report_content:
+            logger.info(f"Found report in final state (length: {len(report_content)})")
+            job_status[job_id].update({
+                "status": "completed",
+                "report": report_content,
+                "company": data.company,
+                "last_update": datetime.now().isoformat()
+            })
+            if mongodb:
+                mongodb.update_job(job_id=job_id, status="completed")
+                mongodb.store_report(job_id=job_id, report_data={"report": report_content})
+            await manager.send_status_update(
+                job_id=job_id,
+                status="completed",
+                message="Research completed successfully",
+                result={
+                    "report": report_content,
+                    "company": data.company
+                }
+            )
+        else:
+            logger.error(f"Research completed without finding report. State keys: {list(state.keys())}")
+            logger.error(f"Editor state: {state.get('editor', {})}")
+            await manager.send_status_update(
+                job_id=job_id,
+                status="failed",
+                message="Research completed but no report was generated",
+                error="No report found"
+            )
 
     except Exception as e:
-        logger.error(f"Research failed: {e}")
+        logger.error(f"Research failed: {str(e)}")
+        await manager.send_status_update(
+            job_id=job_id,
+            status="failed",
+            message=f"Research failed: {str(e)}",
+            error=str(e)
+        )
         if mongodb:
             mongodb.update_job(job_id=job_id, status="failed", error=str(e))
 
 @app.get("/research/pdf/{filename}")
 async def get_pdf(filename: str):
-    """Download PDF report endpoint."""
     pdf_path = os.path.join(REPORTS_DIR, filename)
     if not os.path.exists(pdf_path):
         raise HTTPException(status_code=404, detail="PDF not found")
@@ -185,7 +176,6 @@ async def get_pdf(filename: str):
 
 @app.websocket("/research/ws/{job_id}")
 async def websocket_endpoint(websocket: WebSocket, job_id: str):
-    """WebSocket endpoint (CORS does not apply)."""
     try:
         await websocket.accept()
         await manager.connect(websocket, job_id)
@@ -213,7 +203,6 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
 
 @app.get("/research/{job_id}")
 async def get_research(job_id: str):
-    """Retrieve research results by job ID."""
     if not mongodb:
         raise HTTPException(status_code=501, detail="Database persistence not configured")
     job = mongodb.get_job(job_id)
@@ -223,13 +212,49 @@ async def get_research(job_id: str):
 
 @app.get("/research/{job_id}/report")
 async def get_research_report(job_id: str):
-    """Retrieve research report by job ID."""
     if not mongodb:
-        raise HTTPException(status_code=501, detail="Database persistence not configured")
+        if job_id in job_status:
+            result = job_status[job_id]
+            if report := result.get("report"):
+                return {"report": report}
+        raise HTTPException(status_code=404, detail="Report not found")
+    
     report = mongodb.get_report(job_id)
     if not report:
         raise HTTPException(status_code=404, detail="Research report not found")
     return report
+
+@app.post("/research/{job_id}/generate-pdf")
+async def generate_pdf(job_id: str):
+    try:
+        if job_id not in job_status:
+            raise HTTPException(status_code=404, detail="Research job not found")
+        
+        result = job_status[job_id]
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=500, detail="Invalid research result format")
+
+        report_content = result.get('report')
+        if not report_content:
+            raise HTTPException(status_code=404, detail="No report content available")
+            
+        company_name = result.get('company', 'Unknown_Company')
+        company_name = ''.join(c for c in company_name if c.isalnum() or c.isspace()).strip().replace(' ', '_')
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        pdf_filename = f"{company_name}_Research_Report_{timestamp}.pdf"
+        pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
+
+        generate_pdf_from_md(report_content, pdf_path)
+        
+        return JSONResponse({
+            "status": "success",
+            "pdf_url": f"/research/pdf/{pdf_filename}"
+        })
+        
+    except Exception as e:
+        logger.error(f"PDF generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
     uvicorn.run(

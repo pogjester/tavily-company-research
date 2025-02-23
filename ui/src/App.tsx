@@ -10,6 +10,8 @@ import {
   Github,
   ChevronDown,
   ChevronUp,
+  Download,
+  XCircle,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from 'rehype-raw';
@@ -169,6 +171,10 @@ function App() {
   // Add state for phase tracking
   const [currentPhase, setCurrentPhase] = useState<'search' | 'enrichment' | 'briefing' | 'complete' | null>(null);
 
+  // Add new state for PDF generation
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
   const connectWebSocket = (jobId: string) => {
     console.log("Initializing WebSocket connection for job:", jobId);
     const ws = new WebSocket(`${WS_URL}/research/ws/${jobId}`);
@@ -282,7 +288,7 @@ function App() {
           
           // Initialize enrichment counts when starting a category
           if (statusData.status === "category_start") {
-            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            const category = statusData.result.category as keyof EnrichmentCounts;
             if (category) {
               setResearchState((prev) => ({
                 ...prev,
@@ -298,7 +304,7 @@ function App() {
           }
           // Update enriched count when a document is processed
           else if (statusData.status === "extracted") {
-            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            const category = statusData.result.category as keyof EnrichmentCounts;
             if (category) {
               setResearchState((prev) => {
                 const currentCounts = prev.enrichmentCounts?.[category];
@@ -309,7 +315,29 @@ function App() {
                       ...prev.enrichmentCounts,
                       [category]: {
                         ...currentCounts,
-                        enriched: currentCounts.enriched + 1
+                        enriched: Math.min(currentCounts.enriched + 1, currentCounts.total)
+                      }
+                    } as EnrichmentCounts
+                  };
+                }
+                return prev;
+              });
+            }
+          }
+          // Handle extraction errors
+          else if (statusData.status === "extraction_error") {
+            const category = statusData.result.category as keyof EnrichmentCounts;
+            if (category) {
+              setResearchState((prev) => {
+                const currentCounts = prev.enrichmentCounts?.[category];
+                if (currentCounts) {
+                  return {
+                    ...prev,
+                    enrichmentCounts: {
+                      ...prev.enrichmentCounts,
+                      [category]: {
+                        ...currentCounts,
+                        total: Math.max(0, currentCounts.total - 1)
                       }
                     } as EnrichmentCounts
                   };
@@ -320,7 +348,7 @@ function App() {
           }
           // Update final counts when a category is complete
           else if (statusData.status === "category_complete") {
-            const category = statusData.result.category?.replace('_data', '') as keyof EnrichmentCounts;
+            const category = statusData.result.category as keyof EnrichmentCounts;
             if (category) {
               setResearchState((prev) => ({
                 ...prev,
@@ -588,109 +616,34 @@ function App() {
     }
   };
 
-  // Add document count display component
-  const DocumentStats = ({ docCounts }: { docCounts: Record<string, DocCount> }) => {
-    if (!docCounts) return null;
-
-    return (
-      <div className="glass rounded-xl shadow-lg p-6 mt-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Document Curation Stats</h2>
-        <div className="grid grid-cols-4 gap-4">
-          {Object.entries(docCounts).map(([category, counts]: [string, DocCount]) => (
-            <div key={category} className="text-center">
-              <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
-              <div className="text-white">
-                <div className="text-2xl font-bold">{counts.kept}</div>
-                <div className="text-sm text-gray-400">kept from {counts.initial}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  // Add new function to handle PDF generation
+  const handleGeneratePdf = async () => {
+    if (!output || isGeneratingPdf) return;
+    
+    setIsGeneratingPdf(true);
+    try {
+      const response = await fetch(`${API_URL}/research/${output.details.job_id}/generate-pdf`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+      
+      const data = await response.json();
+      setPdfUrl(data.pdf_url);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
+
+  // Add document count display component
 
   // Add BriefingProgress component
-  const BriefingProgress = () => {
-    const categories = [
-      { key: 'company' as keyof BriefingStatus, icon: '🏢', label: 'Company Analysis' },
-      { key: 'industry' as keyof BriefingStatus, icon: '🏭', label: 'Industry Analysis' },
-      { key: 'financial' as keyof BriefingStatus, icon: '💰', label: 'Financial Analysis' },
-      { key: 'news' as keyof BriefingStatus, icon: '📰', label: 'News Analysis' }
-    ] as const;
-
-    return (
-      <div className="glass rounded-xl shadow-lg p-6 mt-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Research Briefings</h2>
-        <div className="grid grid-cols-4 gap-4">
-          {categories.map(({ key, icon, label }) => (
-            <div key={key} className="text-center">
-              <div className="flex items-center justify-center mb-2">
-                <span className="mr-2">{icon}</span>
-                <h3 className="text-sm font-medium text-gray-400">{label}</h3>
-              </div>
-              <div className="text-white">
-                {researchState.briefingStatus[key] ? (
-                  <div className="flex items-center justify-center text-blue-400">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center text-blue-400">
-                    <Loader2 className="animate-spin h-6 w-6" />
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   // Add EnrichmentProgress component
-  const EnrichmentProgress = () => {
-    const categories = [
-      { key: 'company', icon: '🏢', label: 'Company Documents' },
-      { key: 'industry', icon: '🏭', label: 'Industry Documents' },
-      { key: 'financial', icon: '💰', label: 'Financial Documents' },
-      { key: 'news', icon: '📰', label: 'News Documents' }
-    ] as const;
-
-    return (
-      <div className="glass rounded-xl shadow-lg p-6 mt-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Content Enrichment Progress</h2>
-        <div className="grid grid-cols-4 gap-4">
-          {categories.map(({ key, icon, label }) => {
-            const counts = researchState.enrichmentCounts?.[key as keyof EnrichmentCounts];
-            return (
-              <div key={key} className="text-center">
-                <div className="flex items-center justify-center mb-2">
-                  <span className="mr-2">{icon}</span>
-                  <h3 className="text-sm font-medium text-gray-400">{label}</h3>
-                </div>
-                <div className="text-white">
-                  <div className="text-2xl font-bold">
-                    {counts ? (
-                      <span className="text-blue-400">{counts.enriched}</span>
-                    ) : (
-                      <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
-                    )}
-                  </div>
-                  <div className="text-sm text-gray-400">
-                    {counts ? (
-                      `enriched from ${counts.total}`
-                    ) : (
-                      "waiting..."
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   // Add these styles at the top of the component, before the return statement
   const glassStyle = "backdrop-filter backdrop-blur-lg bg-white/5 border border-white/10 shadow-xl";
@@ -706,9 +659,39 @@ function App() {
     if (output && output.details) {
       components.push(
         <div key="report" className={`${glassCardStyle} transition-all duration-500 ease-in-out transform`}>
-          <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
-            Research Results
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
+              Research Results
+            </h2>
+            {isComplete && (
+              <button
+                onClick={handleGeneratePdf}
+                disabled={isGeneratingPdf}
+                className="inline-flex items-center px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 text-white hover:from-blue-500 hover:to-blue-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingPdf ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                    Generating PDF...
+                  </>
+                ) : pdfUrl ? (
+                  <a
+                    href={`${API_URL}${pdfUrl}`}
+                    className="flex items-center"
+                    download="research_report.pdf"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </a>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Generate PDF
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           <div className="prose prose-invert prose-lg max-w-none">
             <p className="text-gray-300">{output.summary}</p>
             <div className={`mt-4 ${glassStyle} rounded-xl p-4 overflow-x-auto`}>
@@ -1135,7 +1118,11 @@ function App() {
             <div className="space-y-4">
               <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0">
-                  {isComplete ? (
+                  {error ? (
+                    <div className={`${glassStyle} p-2 rounded-full`}>
+                      <XCircle className="h-6 w-6 text-blue-400" />
+                    </div>
+                  ) : isComplete ? (
                     <div className={`${glassStyle} p-2 rounded-full`}>
                       <CheckCircle2 className="h-6 w-6 text-blue-400" />
                     </div>
@@ -1148,7 +1135,7 @@ function App() {
                 <div className="flex-1">
                   <p className="font-medium text-white">{status.step}</p>
                   <p className="text-sm text-gray-400 whitespace-pre-wrap">
-                    {status.message}
+                    {error || status.message}
                   </p>
                 </div>
               </div>

@@ -203,24 +203,26 @@ Analyze the following documents and extract key information. Provide only the br
             return {'content': ''}
 
     async def create_briefings(self, state: ResearchState) -> ResearchState:
+        """Create briefings for all categories in parallel."""
         company = state.get('company', 'Unknown Company')
+        websocket_manager = state.get('websocket_manager')
+        job_id = state.get('job_id')
         
         # Send initial briefing status
-        if websocket_manager := state.get('websocket_manager'):
-            if job_id := state.get('job_id'):
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="processing",
-                    message="Starting research briefings",
-                    result={"step": "Briefing"}
-                )
+        if websocket_manager and job_id:
+            await websocket_manager.send_status_update(
+                job_id=job_id,
+                status="processing",
+                message="Starting research briefings",
+                result={"step": "Briefing"}
+            )
 
         context = {
             "company": company,
             "industry": state.get('industry', 'Unknown'),
             "hq_location": state.get('hq_location', 'Unknown'),
-            "websocket_manager": state.get('websocket_manager'),  # Pass WebSocket manager
-            "job_id": state.get('job_id')  # Pass job ID
+            "websocket_manager": websocket_manager,
+            "job_id": job_id
         }
         logger.info(f"Creating section briefings for {company}")
         
@@ -232,44 +234,68 @@ Analyze the following documents and extract key information. Provide only the br
             'company_data': ("company", "company_briefing")
         }
         
-        # Initialize a dict for all briefings
         briefings = {}
-        summary = [f"Creating section briefings for {company}:"]
-        
+
         # Create tasks for parallel processing
-        tasks = []
+        briefing_tasks = []
         for data_field, (cat, briefing_key) in categories.items():
             curated_key = f'curated_{data_field}'
             curated_data = state.get(curated_key, {})
+            
             if curated_data:
                 logger.info(f"Processing {data_field} with {len(curated_data)} documents")
-                summary.append(f"Processing {data_field} ({len(curated_data)} documents)...")
-                tasks.append((
-                    self.generate_category_briefing(curated_data, cat, context),
-                    cat,
-                    briefing_key,
-                    data_field
-                ))
+                
+                # Create task for this category
+                briefing_tasks.append({
+                    'category': cat,
+                    'briefing_key': briefing_key,
+                    'data_field': data_field,
+                    'curated_data': curated_data
+                })
             else:
-                summary.append(f"No data available for {data_field}")
+                logger.info(f"No data available for {data_field}")
                 state[briefing_key] = ""
 
-        # Process all briefings in parallel
-        if tasks:
-            results = await asyncio.gather(*(task[0] for task in tasks))
+        # Process briefings in parallel with rate limiting
+        if briefing_tasks:
+            # Rate limiting semaphore for LLM API
+            briefing_semaphore = asyncio.Semaphore(2)  # Limit to 2 concurrent briefings
             
-            # Process results
-            for result, (_, cat, briefing_key, data_field) in zip(results, tasks):
-                if result['content']:
-                    briefings[cat] = result['content']
-                    state[briefing_key] = result['content']
-                    summary.append(f"Completed {data_field} ({len(result['content'])} characters)")
-                else:
-                    summary.append(f"Failed to generate briefing for {data_field}")
-                    state[briefing_key] = ""
-        
+            async def process_briefing(task: Dict[str, Any]) -> Dict[str, Any]:
+                """Process a single briefing with rate limiting."""
+                async with briefing_semaphore:
+                    result = await self.generate_category_briefing(
+                        task['curated_data'],
+                        task['category'],
+                        context
+                    )
+                    
+                    if result['content']:
+                        briefings[task['category']] = result['content']
+                        state[task['briefing_key']] = result['content']
+                        logger.info(f"Completed {task['data_field']} briefing ({len(result['content'])} characters)")
+                    else:
+                        logger.error(f"Failed to generate briefing for {task['data_field']}")
+                        state[task['briefing_key']] = ""
+                    
+                    return {
+                        'category': task['category'],
+                        'success': bool(result['content']),
+                        'length': len(result['content']) if result['content'] else 0
+                    }
+
+            # Process all briefings in parallel
+            results = await asyncio.gather(*[
+                process_briefing(task) 
+                for task in briefing_tasks
+            ])
+            
+            # Log completion statistics
+            successful_briefings = sum(1 for r in results if r['success'])
+            total_length = sum(r['length'] for r in results)
+            logger.info(f"Generated {successful_briefings}/{len(briefing_tasks)} briefings with total length {total_length}")
+
         state['briefings'] = briefings
-        state.setdefault('messages', []).append(AIMessage(content="\n".join(summary)))
         return state
 
     async def run(self, state: ResearchState) -> ResearchState:
