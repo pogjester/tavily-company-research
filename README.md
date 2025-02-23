@@ -5,7 +5,7 @@ An advanced, AI-powered research platform that automatically generates comprehen
 ## Features ✨
 
 - **Multi-Source Research**: Gathers data from various sources including company websites, news articles, financial reports, and industry analyses
-- **Dual-Layer Content Filtering**: Combines Tavily's relevance scoring with Cohere's reranking for precise content curation
+- **AI-Powered Content Filtering**: Uses Tavily's relevance scoring for precise content curation
 - **Real-Time Progress Streaming**: Uses WebSocket connections to stream research progress and results
 - **Gemini-Powered Synthesis**: Leverages Google's Gemini 2.0 Flash for efficient content generation
 - **Modern React Frontend**: Beautiful, responsive UI with real-time updates and progress tracking
@@ -25,37 +25,24 @@ The platform follows a modular architecture with specialized nodes that process 
 
 2. **Processing Nodes**:
    - `Collector`: Aggregates research data from all analyzers
-   - `Curator`: Implements dual-layer content filtering
+   - `Curator`: Implements content filtering and relevance scoring
    - `Briefing`: Generates category-specific summaries
    - `Editor`: Compiles and formats the final report
 
 ### Content Curation System 🎯
 
-The platform implements a sophisticated dual-layer content filtering system in `curator.py`:
+The platform implements a sophisticated content filtering system in `curator.py`:
 
-1. **Initial Filtering (Tavily Score)**:
-   - Documents are first scored by Tavily's AI-powered search
-   - A minimum threshold of 0.25 is required to proceed
+1. **Relevance Scoring**:
+   - Documents are scored by Tavily's AI-powered search
+   - A minimum threshold of 0.4 is required to proceed
    - Scores reflect relevance to the specific research query
+   - Higher scores indicate better matches to the research intent
 
-2. **Cohere Reranking**:
-   ```python
-   response = self.co.rerank(
-       model='rerank-v3.5',
-       query=specific_query,
-       documents=[formatted_doc],
-       top_n=1
-   )
-   ```
-   - Each document passing the Tavily threshold is reranked by Cohere
-   - Uses Cohere's rerank-v3.5 model for precise relevance assessment
-   - Documents must achieve a minimum score of 0.3 to be kept
-   - Evaluates semantic relevance to category-specific queries
-
-3. **Document Processing**:
+2. **Document Processing**:
    - Content is normalized and cleaned
    - URLs are deduplicated and standardized
-   - Documents are sorted by combined relevance scores
+   - Documents are sorted by relevance scores
    - Real-time progress updates are sent via WebSocket
 
 ### Content Generation with Gemini 🤖
@@ -122,7 +109,6 @@ The platform implements a WebSocket-based real-time communication system:
 - Node.js 18+
 - API Keys:
   - Tavily API Key
-  - Cohere API Key
   - Google Gemini API Key
 
 ### Installation
@@ -153,7 +139,6 @@ npm install
 
 ```env
 TAVILY_API_KEY=your_tavily_key
-COHERE_API_KEY=your_cohere_key
 GEMINI_API_KEY=your_gemini_key
 ```
 
@@ -235,6 +220,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments 🙏
 
 - [Tavily](https://tavily.com/) for the research API
-- [Cohere](https://cohere.com/) for the reranking model
 - [Google Gemini](https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini) for the text generation model
 - All other open-source libraries and their contributors
