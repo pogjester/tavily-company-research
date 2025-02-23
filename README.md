@@ -7,7 +7,9 @@ An advanced, AI-powered research platform that automatically generates comprehen
 - **Multi-Source Research**: Gathers data from various sources including company websites, news articles, financial reports, and industry analyses
 - **AI-Powered Content Filtering**: Uses Tavily's relevance scoring for precise content curation
 - **Real-Time Progress Streaming**: Uses WebSocket connections to stream research progress and results
-- **Gemini-Powered Synthesis**: Leverages Google's Gemini 2.0 Flash for efficient content generation
+- **Dual Model Architecture**: 
+  - Gemini 2.0 Flash for high-context research synthesis
+  - GPT-4 Optimized for precise report formatting and editing
 - **Modern React Frontend**: Beautiful, responsive UI with real-time updates and progress tracking
 - **Modular Architecture**: Built using a pipeline of specialized research and processing nodes
 
@@ -26,8 +28,30 @@ The platform follows a modular architecture with specialized nodes that process 
 2. **Processing Nodes**:
    - `Collector`: Aggregates research data from all analyzers
    - `Curator`: Implements content filtering and relevance scoring
-   - `Briefing`: Generates category-specific summaries
-   - `Editor`: Compiles and formats the final report
+   - `Briefing`: Generates category-specific summaries using Gemini 2.0 Flash
+   - `Editor`: Compiles and formats the final report using GPT-4
+
+### Content Generation Architecture 🤖
+
+The platform leverages a dual-model approach for optimal performance:
+
+1. **Gemini 2.0 Flash** (`briefing.py`):
+   - Handles high-context research synthesis tasks
+   - Excels at processing and summarizing large volumes of data
+   - Used for generating initial category briefings
+   - Efficient at maintaining context across multiple documents
+
+2. **GPT-4 Optimized** (`editor.py`):
+   - Specializes in precise formatting and editing tasks
+   - Handles markdown structure and consistency
+   - Superior at following exact formatting instructions
+   - Used for:
+     - Final report compilation
+     - Content deduplication
+     - Markdown formatting
+     - Real-time report streaming
+
+This dual-model approach combines Gemini's strength in handling large context windows with GPT-4's precision in following specific formatting instructions.
 
 ### Content Curation System 🎯
 
@@ -44,25 +68,6 @@ The platform implements a sophisticated content filtering system in `curator.py`
    - URLs are deduplicated and standardized
    - Documents are sorted by relevance scores
    - Real-time progress updates are sent via WebSocket
-
-### Content Generation with Gemini 🤖
-
-The platform uses Google's Gemini 2.0 Flash model for efficient content generation:
-
-1. **Briefing Generation** (`briefing.py`):
-   ```python
-   self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
-   ```
-   - Generates category-specific briefings (company, industry, financial, news)
-   - Uses structured prompts with specific formatting requirements
-   - Processes documents in parallel for efficiency
-   - Implements content length management and truncation
-
-2. **Report Compilation** (`editor.py`):
-   - Combines individual briefings into a cohesive report
-   - Maintains consistent markdown formatting
-   - Implements deduplication and content organization
-   - Adds reference links and citations
 
 ### Real-Time Communication System 📡
 
