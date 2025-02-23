@@ -589,16 +589,22 @@ function App() {
     );
   };
 
+  // Add these styles at the top of the component, before the return statement
+  const glassStyle = "backdrop-filter backdrop-blur-lg bg-white/5 border border-white/10 shadow-xl";
+  const glassCardStyle = `${glassStyle} rounded-2xl p-6`;
+  const glassInputStyle = `${glassStyle} pl-10 w-full rounded-lg py-3 px-4 text-white shadow-sm focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-gray-400 bg-white/5`;
+  const glassButtonStyle = "w-full mt-6 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:from-blue-500 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-6">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-900 via-[#0f1c3f] to-gray-900 p-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         {/* Header with GitHub Link */}
-        <div className="relative">
+        <div className="relative mb-12">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-white mb-2">
+            <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-3">
               Tavily Company Researcher
             </h1>
-            <p className="text-gray-400">
+            <p className="text-gray-400 text-lg">
               Enter company details to begin research
             </p>
           </div>
@@ -606,24 +612,24 @@ function App() {
             href="https://github.com/pogjester"
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute top-0 right-0 text-gray-400 hover:text-white transition-colors"
+            className={`absolute top-0 right-0 text-gray-400 hover:text-white transition-colors ${glassStyle} p-2 rounded-lg`}
             aria-label="GitHub Profile"
           >
-            <Github className="h-8 w-8" />
+            <Github className="h-6 w-6" />
           </a>
         </div>
 
         {/* Form */}
         <form
           onSubmit={handleSubmit}
-          className="glass rounded-xl shadow-lg p-6 space-y-4"
+          className={`${glassCardStyle} space-y-6`}
         >
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Company Name */}
             <div className="relative">
               <label
                 htmlFor="companyName"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-300 mb-2"
               >
                 Company Name *
               </label>
@@ -640,7 +646,7 @@ function App() {
                       companyName: e.target.value,
                     }))
                   }
-                  className="pl-10 w-full rounded-lg bg-gray-800/50 border border-gray-700 text-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+                  className={glassInputStyle}
                   placeholder="Enter company name"
                 />
               </div>
@@ -650,7 +656,7 @@ function App() {
             <div>
               <label
                 htmlFor="companyUrl"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-300 mb-2"
               >
                 Company URL
               </label>
@@ -666,7 +672,7 @@ function App() {
                       companyUrl: e.target.value,
                     }))
                   }
-                  className="pl-10 w-full rounded-lg bg-gray-800/50 border border-gray-700 text-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+                  className={glassInputStyle}
                   placeholder="https://example.com"
                 />
               </div>
@@ -676,7 +682,7 @@ function App() {
             <div>
               <label
                 htmlFor="companyHq"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-300 mb-2"
               >
                 Company HQ
               </label>
@@ -692,7 +698,7 @@ function App() {
                       companyHq: e.target.value,
                     }))
                   }
-                  className="pl-10 w-full rounded-lg bg-gray-800/50 border border-gray-700 text-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+                  className={glassInputStyle}
                   placeholder="City, Country"
                 />
               </div>
@@ -702,7 +708,7 @@ function App() {
             <div>
               <label
                 htmlFor="companyIndustry"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-300 mb-2"
               >
                 Company Industry
               </label>
@@ -718,7 +724,7 @@ function App() {
                       companyIndustry: e.target.value,
                     }))
                   }
-                  className="pl-10 w-full rounded-lg bg-gray-800/50 border border-gray-700 text-white py-2 px-3 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-500"
+                  className={glassInputStyle}
                   placeholder="e.g. Technology, Healthcare"
                 />
               </div>
@@ -728,7 +734,7 @@ function App() {
           <button
             type="submit"
             disabled={isResearching || !formData.companyName}
-            className="w-full mt-6 inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+            className={glassButtonStyle}
           >
             {isResearching ? (
               <>
@@ -746,24 +752,28 @@ function App() {
 
         {/* Error Message */}
         {error && (
-          <div className="glass rounded-xl shadow-lg p-6 bg-red-900/50 border border-red-700">
+          <div className={`${glassCardStyle} border-red-500/30 bg-red-900/20`}>
             <p className="text-red-300">{error}</p>
           </div>
         )}
 
         {/* Status Box */}
         {status && (
-          <div ref={statusRef} className="glass rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">
+          <div ref={statusRef} className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-6">
               Research Status
             </h2>
             <div className="space-y-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0">
                   {isComplete ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-400" />
+                    <div className={`${glassStyle} p-2 rounded-full`}>
+                      <CheckCircle2 className="h-6 w-6 text-green-400" />
+                    </div>
                   ) : (
-                    <Loader2 className="animate-spin h-5 w-5 text-blue-400" />
+                    <div className={`${glassStyle} p-2 rounded-full`}>
+                      <Loader2 className="animate-spin h-6 w-6 text-blue-400" />
+                    </div>
                   )}
                 </div>
                 <div className="flex-1">
@@ -777,25 +787,51 @@ function App() {
           </div>
         )}
 
-        {/* Briefing Progress - Show during briefing phase */}
+        {/* Progress Components - Update their styling */}
         {isResearching && status?.step === "Briefing" && (
-          <BriefingProgress />
+          <div className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
+              Research Briefings
+            </h2>
+            <div className="grid grid-cols-4 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => (
+                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                  <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+                  <div className="text-white">
+                    {researchState.briefingStatus[category as keyof BriefingStatus] ? (
+                      <div className="flex items-center justify-center text-green-400">
+                        <CheckCircle2 className="h-6 w-6" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center text-blue-400">
+                        <Loader2 className="animate-spin h-6 w-6" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* Document Curation Stats - Show only during curation */}
+        {/* Document Curation Stats */}
         {isResearching && status?.step === "Curation" && researchState.docCounts && (
-          <div className="glass rounded-xl shadow-lg p-6 mt-4">
-            <h2 className="text-lg font-semibold text-white mb-4">Document Curation Progress</h2>
+          <div className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
+              Document Curation Progress
+            </h2>
             <div className="grid grid-cols-4 gap-4">
               {['company', 'industry', 'financial', 'news'].map((category) => {
                 const counts = researchState.docCounts?.[category as keyof typeof researchState.docCounts];
                 return (
-                  <div key={category} className="text-center">
+                  <div key={category} className={`${glassStyle} rounded-xl p-3`}>
                     <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
                     <div className="text-white">
-                      <div className="text-2xl font-bold">
+                      <div className="text-2xl font-bold mb-1">
                         {counts ? (
-                          <span className="text-blue-400">{counts.kept}</span>
+                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-300">
+                            {counts.kept}
+                          </span>
                         ) : (
                           <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
                         )}
@@ -815,246 +851,119 @@ function App() {
           </div>
         )}
 
+        {/* Enrichment Progress */}
+        {isResearching && status?.step === "Enriching" && (
+          <div className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
+              Content Enrichment Progress
+            </h2>
+            <div className="grid grid-cols-4 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => {
+                const counts = researchState.enrichmentCounts?.[category as keyof EnrichmentCounts];
+                return (
+                  <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2 capitalize">{category}</h3>
+                    <div className="text-white">
+                      <div className="text-2xl font-bold mb-1">
+                        {counts ? (
+                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-300">
+                            {counts.enriched}
+                          </span>
+                        ) : (
+                          <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-400" />
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {counts ? (
+                          `enriched from ${counts.total}`
+                        ) : (
+                          "waiting..."
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Query Display Section */}
         {researchState.queries.length > 0 && (
-          <div className="glass rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">
+          <div className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
               Generated Research Queries
             </h2>
-            <div className="grid grid-cols-2 gap-6">
-              {/* Company Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">🏢</span>
-                  Company Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "company_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("company_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Industry Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">🏭</span>
-                  Industry Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "industry_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("industry_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Financial Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">💰</span>
-                  Financial Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "financial_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("financial_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
-
-              {/* News Analysis */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium text-gray-400 flex items-center">
-                  <span className="mr-2">📰</span>
-                  News Analysis
-                </h3>
-                {researchState.queries
-                  .filter((q) => q.category === "news_analyzer")
-                  .map((query, idx) => (
-                    <div key={idx} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                    </div>
-                  ))}
-                {Object.entries(researchState.streamingQueries)
-                  .filter(([key]) => key.startsWith("news_analyzer"))
-                  .map(([key, query]) => (
-                    <div key={key} className="p-3 bg-gray-800/50 rounded-lg border border-gray-700 text-sm">
-                      <span className="text-gray-400">{query.text}</span>
-                      <span className="animate-pulse ml-1">|</span>
-                    </div>
-                  ))}
-              </div>
+            <div className="grid grid-cols-2 gap-4">
+              {['company', 'industry', 'financial', 'news'].map((category) => (
+                <div key={category} className={`${glassStyle} rounded-xl p-3`}>
+                  <h3 className="text-sm font-medium text-gray-400 flex items-center mb-3">
+                    <span className="mr-2">{
+                      category === 'company' ? '🏢' :
+                      category === 'industry' ? '🏭' :
+                      category === 'financial' ? '💰' : '📰'
+                    }</span>
+                    {category.charAt(0).toUpperCase() + category.slice(1)} Analysis
+                  </h3>
+                  <div className="space-y-2">
+                    {researchState.queries
+                      .filter((q) => q.category === `${category}_analyzer`)
+                      .map((query, idx) => (
+                        <div key={idx} className={`${glassStyle} rounded-lg p-2`}>
+                          <span className="text-gray-300">{query.text}</span>
+                        </div>
+                      ))}
+                    {Object.entries(researchState.streamingQueries)
+                      .filter(([key]) => key.startsWith(`${category}_analyzer`))
+                      .map(([key, query]) => (
+                        <div key={key} className={`${glassStyle} rounded-lg p-2`}>
+                          <span className="text-gray-300">{query.text}</span>
+                          <span className="animate-pulse ml-1 text-blue-400">|</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
         {/* Output Box */}
         {output && output.details && (
-          <div className="glass rounded-xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">
+          <div className={glassCardStyle}>
+            <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-4">
               Research Results
             </h2>
             <div className="prose prose-invert prose-lg max-w-none">
               <p className="text-gray-300">{output.summary}</p>
-              <div className="mt-4 bg-gray-800/50 p-6 rounded-lg overflow-x-auto border border-gray-700">
+              <div className={`mt-4 ${glassStyle} rounded-xl p-4 overflow-x-auto`}>
                 <ReactMarkdown
                   rehypePlugins={[rehypeRaw]}
                   components={{
-                    // Main container with consistent spacing
                     div: ({node, ...props}) => (
-                      <div className="space-y-6" {...props} />
+                      <div className="space-y-4 text-gray-200" {...props} />
                     ),
-                    // Main title (h1)
                     h1: ({node, ...props}) => (
-                      <h1 className="text-3xl font-bold text-white mt-10 mb-6" {...props} />
+                      <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-8 mb-4" {...props} />
                     ),
-                    // Main sections (##)
                     h2: ({node, ...props}) => (
-                      <h2 className="text-2xl font-bold text-white mt-8 mb-4" {...props} />
+                      <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-6 mb-3" {...props} />
                     ),
-                    // Subsections (###)
                     h3: ({node, ...props}) => (
-                      <h3 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
+                      <h3 className="text-lg font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mt-4 mb-2" {...props} />
                     ),
-                    // Regular lists
-                    ul: ({node, ...props}: {node?: any, children?: React.ReactNode}) => (
-                      <ul className="space-y-2 my-4">{props.children}</ul>
+                    p: ({node, ...props}) => (
+                      <p className="text-gray-200 my-2" {...props} />
                     ),
-                    // Regular list items
-                    li: ({node, children}: {node?: any, children?: React.ReactNode}) => (
-                      <li className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
-                        <div className="inline-block pl-4">{children}</div>
-                      </li>
+                    ul: ({node, ...props}) => (
+                      <ul className="text-gray-200 space-y-1 list-disc pl-6" {...props} />
                     ),
-                    // Paragraphs that might contain subsections and bullet points
-                    p: ({node, children}: {node?: any, children?: React.ReactNode}) => {
-                      if (typeof children === 'string') {
-                        // Check if this is a bullet point list (even without newlines)
-                        if (children.trim().startsWith('•') || children.trim().startsWith('*')) {
-                          const bulletPoints = children
-                            .split('\n')
-                            .filter(line => line.trim())
-                            .map(line => line.replace(/^[•\*]\s*/, '').trim());
-
-                          return (
-                            <ul className="space-y-2 my-4">
-                              {bulletPoints.map((point, i) => (
-                                <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
-                                  <div className="inline-block pl-4">{point}</div>
-                                </li>
-                              ))}
-                            </ul>
-                          );
-                        }
-
-                        // Split content by double newlines to separate sections
-                        const sections = children.split('\n\n');
-                        
-                        return (
-                          <div className="space-y-6">
-                            {sections.map((section, idx) => {
-                              // Check if this is a subsection with bold header
-                              const headerMatch = section.match(/^\*\*(.*?)\*\*\n/);
-                              
-                              if (headerMatch) {
-                                const [fullMatch, headerText] = headerMatch;
-                                const bulletPoints = section
-                                  .slice(fullMatch.length)
-                                  .split('\n')
-                                  .filter(line => line.trim())
-                                  .map(line => line.replace(/^[•\*]\s*/, '').trim());
-
-                                return (
-                                  <div key={idx} className="space-y-3">
-                                    <h3 className="text-xl font-semibold text-white">{headerText}</h3>
-                                    <ul className="space-y-2">
-                                      {bulletPoints.map((point, i) => (
-                                        <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
-                                          <div className="inline-block pl-4">{point}</div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                );
-                              }
-
-                              // Check if this section is a bullet point list
-                              if (section.trim().startsWith('•') || section.trim().startsWith('*')) {
-                                const bulletPoints = section
-                                  .split('\n')
-                                  .filter(line => line.trim())
-                                  .map(line => line.replace(/^[•\*]\s*/, '').trim());
-
-                                return (
-                                  <ul key={idx} className="space-y-2 my-4">
-                                    {bulletPoints.map((point, i) => (
-                                      <li key={i} className="ml-6 text-gray-300 relative before:absolute before:content-['•'] before:text-gray-500 before:left-[-1.25em] before:top-[0.125em]">
-                                        <div className="inline-block pl-4">{point}</div>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                );
-                              }
-
-                              // Regular paragraph
-                              return (
-                                <p key={idx} className="text-gray-300 leading-relaxed">
-                                  {section}
-                                </p>
-                              );
-                            })}
-                          </div>
-                        );
-                      }
-                      
-                      return <p className="text-gray-300 leading-relaxed">{children}</p>;
-                    },
-                    // Other text elements
-                    text: ({children}: {children?: React.ReactNode}) => (
-                      <span className="text-gray-300">{children}</span>
+                    li: ({node, ...props}) => (
+                      <li className="text-gray-200" {...props} />
                     ),
-                    strong: ({node, ...props}) => (
-                      <strong className="text-gray-300 font-semibold" {...props} />
+                    a: ({node, ...props}) => (
+                      <a className="text-blue-400 hover:text-blue-300 transition-colors" {...props} />
                     ),
-                    // Links
-                    a: ({node, href, ...props}) => (
-                      <a 
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 transition-colors"
-                        {...props}
-                      />
-                    )
                   }}
                 >
                   {output.details.report || "No report available"}
@@ -1062,11 +971,6 @@ function App() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* Add Enrichment Progress component to the UI */}
-        {isResearching && status?.step === "Enriching" && (
-          <EnrichmentProgress />
         )}
       </div>
     </div>
