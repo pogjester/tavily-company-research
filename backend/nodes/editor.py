@@ -1,9 +1,8 @@
 from langchain_core.messages import AIMessage
 from typing import Dict, Any
-import google.generativeai as genai
+from openai import AsyncOpenAI
 import os
 import logging
-from ..utils.markdown import standardize_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +12,12 @@ class Editor:
     """Compiles individual section briefings into a cohesive final report."""
     
     def __init__(self) -> None:
-        self.gemini_key = os.getenv("GEMINI_API_KEY")
-        if not self.gemini_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set")
+        self.openai_key = os.getenv("OPENAI_API_KEY")
+        if not self.openai_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
         
-        # Configure Gemini
-        genai.configure(api_key=self.gemini_key)
-        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
+        # Configure OpenAI
+        self.openai_client = AsyncOpenAI(api_key=self.openai_key)
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
         """Compile individual briefing categories from state into a final report."""
@@ -160,9 +158,6 @@ class Editor:
                     reference_lines.append(f"* [{ref}]({ref})")
                 final_report += "\n".join(reference_lines)
             
-            # Final step: Standardize markdown format
-            final_report = standardize_markdown(final_report)
-            
             logger.info(f"Final report compiled with {len(final_report)} characters")
             
             # Log a preview of the report
@@ -220,27 +215,21 @@ Strictly enforce this EXACT document structure:
 Return the report in clean markdown format. No explanations or commentary."""
 
         try:
-            response = self.gemini_model.generate_content(prompt, stream=True)
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "system",
+                    "content": "You are an expert report editor that compiles research briefings into comprehensive company reports."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }],
+                temperature=0,
+                stream=False
+            )
             
-            accumulated_text = ""
-            async for chunk in response:
-                chunk_text = chunk.text
-                print(chunk_text)
-                accumulated_text += chunk_text
-                
-                if websocket_manager := state.get('websocket_manager'):
-                    if job_id := state.get('job_id'):
-                        await websocket_manager.send_status_update(
-                            job_id=job_id,
-                            status="report_chunk",
-                            message="Compiling initial report",
-                            result={
-                                "chunk": chunk_text,
-                                "step": "Editor"
-                            }
-                        )
-            
-            return (accumulated_text or "").strip()
+            return response.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"Error in initial compilation: {e}")
             return (combined_content or "").strip()
@@ -262,26 +251,21 @@ Current report:
 Return the cleaned report in flawless markdown format. No explanations or commentary."""
         
         try:
-            response = self.gemini_model.generate_content(prompt, stream=True)
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "system",
+                    "content": "You are an expert report editor that removes redundancy and improves clarity."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }],
+                temperature=0,
+                stream=False
+            )
             
-            accumulated_text = ""
-            async for chunk in response:
-                chunk_text = chunk.text
-                accumulated_text += chunk_text
-                
-                if websocket_manager := state.get('websocket_manager'):
-                    if job_id := state.get('job_id'):
-                        await websocket_manager.send_status_update(
-                            job_id=job_id,
-                            status="report_chunk",
-                            message="Editing final report",
-                            result={
-                                "chunk": chunk_text,
-                                "step": "Editor"
-                            }
-                        )
-            
-            return (accumulated_text or "").strip()
+            return response.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"Error in editing: {e}")
             return (content or "").strip()
@@ -333,24 +317,61 @@ Critical rules:
 Return the polished report in flawless markdown format. No explanation."""
 
         try:
-            response = self.gemini_model.generate_content(prompt, stream=True)
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "system",
+                    "content": "You are an expert markdown formatter that ensures consistent document structure."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }],
+                temperature=0,
+                stream=True
+            )
             
             accumulated_text = ""
+            buffer = ""  # Buffer for accumulating partial chunks
+            
             async for chunk in response:
-                chunk_text = chunk.text
-                accumulated_text += chunk_text
-                
-                if websocket_manager := state.get('websocket_manager'):
-                    if job_id := state.get('job_id'):
-                        await websocket_manager.send_status_update(
-                            job_id=job_id,
-                            status="report_chunk",
-                            message="Formatting final report",
-                            result={
-                                "chunk": chunk_text,
-                                "step": "Editor"
-                            }
-                        )
+                if chunk.choices[0].finish_reason == "stop":
+                    websocket_manager = state.get('websocket_manager')
+                    if websocket_manager and buffer:
+                        job_id = state.get('job_id')
+                        if job_id:
+                            await websocket_manager.send_status_update(
+                                job_id=job_id,
+                                status="report_chunk",
+                                message="Formatting final report",
+                                result={
+                                    "chunk": buffer,
+                                    "step": "Editor"
+                                }
+                            )
+                    break
+                    
+                chunk_text = chunk.choices[0].delta.content
+                if chunk_text:
+                    accumulated_text += chunk_text
+                    buffer += chunk_text
+                    
+                    # Send buffer when we have a complete sentence or significant chunk
+                    if any(char in buffer for char in ['.', '!', '?', '\n']) and len(buffer) > 10:
+                        websocket_manager = state.get('websocket_manager')
+                        if websocket_manager:
+                            job_id = state.get('job_id')
+                            if job_id:
+                                await websocket_manager.send_status_update(
+                                    job_id=job_id,
+                                    status="report_chunk",
+                                    message="Formatting final report",
+                                    result={
+                                        "chunk": buffer,
+                                        "step": "Editor"
+                                    }
+                                )
+                        buffer = ""  # Reset buffer after sending
             
             return (accumulated_text or "").strip()
         except Exception as e:

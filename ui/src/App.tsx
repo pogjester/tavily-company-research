@@ -969,7 +969,7 @@ function App() {
         <div className="relative mb-12">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-3">
-              Tavily Company Researcher
+              Company Researcher
             </h1>
             <p className="text-gray-400 text-lg">
               Enter company details to begin research

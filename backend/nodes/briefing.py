@@ -168,7 +168,7 @@ Key requirements:
                 break
         
         separator = "\n" + "-" * 40 + "\n"
-        prompt = f"""{prompts.get(category, 'Create an informative and insightful research briefing on {company} in the {industry} industry based on the provided documents.')}
+        prompt = f"""{prompts.get(category, 'Create a focused, informative and insightful research briefing on the company: {company} in the {industry} industry based on the provided documents.')}
 
 Analyze the following documents and extract key information. Provide only the briefing, no explanations or commentary:
 
