@@ -1,25 +1,25 @@
-# Tavily Company Research Platform 🔍
+# Agentic Company Researcher 🔍
 
 ![web ui](<static/ui-1.png>)
 
-An advanced, AI-powered research platform that automatically generates comprehensive company reports by analyzing multiple data sources. The platform uses a sophisticated pipeline of AI agents to gather, curate, and synthesize information about any company.
+A multi-agent tool that generates comprehensive company research reports. The platform uses a pipeline of AI agents to gather, curate, and synthesize information about any company.
 
 ## Features ✨
 
 - **Multi-Source Research**: Gathers data from various sources including company websites, news articles, financial reports, and industry analyses
-- **AI-Powered Content Filtering**: Uses Tavily's relevance scoring for precise content curation
+- **AI-Powered Content Filtering**: Uses Tavily's relevance scoring for content curation
 - **Real-Time Progress Streaming**: Uses WebSocket connections to stream research progress and results
 - **Dual Model Architecture**: 
   - Gemini 2.0 Flash for high-context research synthesis
   - GPT-4 Optimized for precise report formatting and editing
-- **Modern React Frontend**: Beautiful, responsive UI with real-time updates and progress tracking
+- **Modern React Frontend**: Responsive UI with real-time updates, progress tracking, and download options
 - **Modular Architecture**: Built using a pipeline of specialized research and processing nodes
 
-## Technical Architecture 🏗️
+## Agent Framework 🕸️
 
 ### Research Pipeline
 
-The platform follows a modular architecture with specialized nodes that process data sequentially:
+The platform follows an agentic framework with specialized nodes that process data sequentially:
 
 1. **Research Nodes**:
    - `CompanyAnalyzer`: Researches core business information
@@ -31,13 +31,13 @@ The platform follows a modular architecture with specialized nodes that process 
    - `Collector`: Aggregates research data from all analyzers
    - `Curator`: Implements content filtering and relevance scoring
    - `Briefing`: Generates category-specific summaries using Gemini 2.0 Flash
-   - `Editor`: Compiles and formats the final report using GPT-4
+   - `Editor`: Compiles and formats the briefings into a final report using GPT-4o-mini
 
    ![web ui](<static/agent-flow.png>)
 
 ### Content Generation Architecture 🤖
 
-The platform leverages a dual-model approach for optimal performance:
+The platform leverages separate models for optimal performance:
 
 1. **Gemini 2.0 Flash** (`briefing.py`):
    - Handles high-context research synthesis tasks
@@ -55,15 +55,15 @@ The platform leverages a dual-model approach for optimal performance:
      - Markdown formatting
      - Real-time report streaming
 
-This dual-model approach combines Gemini's strength in handling large context windows with GPT-4's precision in following specific formatting instructions.
+This approach combines Gemini's strength in handling large context windows with GPT-4o-mini's precision in following specific formatting instructions.
 
 ### Content Curation System 🎯
 
-The platform implements a sophisticated content filtering system in `curator.py`:
+The platform uses a content filtering system in `curator.py`:
 
 1. **Relevance Scoring**:
    - Documents are scored by Tavily's AI-powered search
-   - A minimum threshold of 0.4 is required to proceed
+   - A minimum threshold (default 0.4) is required to proceed
    - Scores reflect relevance to the specific research query
    - Higher scores indicate better matches to the research intent
 
