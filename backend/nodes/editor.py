@@ -193,20 +193,17 @@ class Editor:
         if references:
             logger.info(f"Found {len(references)} references to add during compilation")
             
-            url_titles = {}
-            for data_type in ['curated_company_data', 'curated_financial_data', 'curated_news_data']:
-                if curated_data := state.get(data_type, {}):
-                    for doc in curated_data.values():
-                        if doc.get('url') in references:
-                            url_titles[doc.get('url')] = doc.get('title', '')
-
+            # Get pre-processed reference titles from curator
+            reference_titles = state.get('reference_titles', {})
+            
             reference_lines = ["\n## References"]
             for ref in references:
-                title = url_titles.get(ref, ref)
+                title = reference_titles.get(ref, ref)
                 if title == ref or not title:
                     reference_lines.append(f"* [{ref}]({ref})")
                 else:
                     reference_lines.append(f"* [{title}]({ref})")
+            
             reference_text = "\n".join(reference_lines)
             logger.info(f"Added {len(references)} references during compilation")
         
@@ -220,6 +217,7 @@ Create a comprehensive and focused report on {company} that:
 2. Maintains important details from each section
 3. Logically organizes information and removes transitional commentary / explanations
 4. Uses clear section headers and structure
+5. MUST include all references provided in the References section
 
 Formatting rules:
 Strictly enforce this EXACT document structure:
@@ -404,7 +402,7 @@ Return the polished report in flawless markdown format. No explanation."""
 
     async def run(self, state: ResearchState) -> ResearchState:
         state = await self.compile_briefings(state)
-        # Ensure the Editor node’s output is stored both top-level and under "editor"
+        # Ensure the Editor node's output is stored both top-level and under "editor"
         if 'report' in state:
             if 'editor' not in state or not isinstance(state['editor'], dict):
                 state['editor'] = {}

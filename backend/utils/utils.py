@@ -2,7 +2,7 @@ import markdown
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem, KeepTogether
 from reportlab.lib.units import inch
 import logging
 import os
@@ -67,7 +67,8 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 spaceAfter=16,
                 spaceBefore=5,
                 textColor=colors.HexColor('#1a1a1a'),
-                leading=28
+                leading=28,
+                keepWithNext=True  # Keep title with next content
             ),
             'CustomHeading2': ParagraphStyle(
                 'CustomHeading2',
@@ -76,18 +77,20 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 spaceBefore=16,
                 spaceAfter=8,
                 textColor=colors.HexColor('#2c3e50'),
-                leading=22
+                leading=22,
+                keepWithNext=True  # Keep h2 with next content
             ),
             'CustomHeading3': ParagraphStyle(
                 'CustomHeading3',
                 parent=styles['Heading3'],
-                fontSize=16,
+                fontSize=14,
                 spaceBefore=16,
                 spaceAfter=8,
-                textColor=colors.HexColor('#3B82F6'),  # Light blue
+                textColor=colors.HexColor('#2c3e50'), 
                 leading=22,
                 fontName='Helvetica-Bold',
-                italic=0  # Remove italics
+                italic=0,  # Remove italics
+                keepWithNext=True  # Keep h3 with next content
             ),
             'CustomBody': ParagraphStyle(
                 'CustomBody',
@@ -97,6 +100,17 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 spaceAfter=4,
                 leading=14,
                 textColor=colors.HexColor('#2c3e50')
+            ),
+            'ListItem': ParagraphStyle(
+                'ListItem',
+                parent=styles['Normal'],
+                fontSize=11,
+                spaceBefore=4,
+                spaceAfter=4,
+                leading=14,
+                textColor=colors.HexColor('#2c3e50'),
+                firstLineIndent=0,  # No indent for list items
+                leftIndent=0  # No left indent as ListFlowable handles this
             ),
             'Link': ParagraphStyle(
                 'Link',
@@ -121,13 +135,14 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 if in_list and current_list_items:
                     # Add the current list to the story
                     story.append(ListFlowable(
-                        [ListItem(Paragraph(item, custom_styles['CustomBody'])) for item in current_list_items],
+                        [ListItem(Paragraph(item, custom_styles['ListItem'])) for item in current_list_items],
                         bulletType='bullet',
                         leftIndent=20,
-                        spaceBefore=4,
-                        spaceAfter=4,
-                        bulletFontSize=8,
-                        bulletOffsetY=2
+                        bulletOffsetX=-6,
+                        bulletOffsetY=2,
+                        bulletFontSize=10,
+                        spaceBefore=6,
+                        spaceAfter=6
                     ))
                     current_list_items = []
                     in_list = False
@@ -137,13 +152,25 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
             # Handle headers
             if line.startswith('# '):
                 text = clean_text(line[2:])
-                story.append(Paragraph(text, custom_styles['MainTitle']))
+                # Keep title with next paragraph only
+                story.append(KeepTogether([
+                    Paragraph(text, custom_styles['MainTitle']),
+                    Spacer(1, 4)
+                ]))
             elif line.startswith('## '):
                 text = clean_text(line[3:])
-                story.append(Paragraph(text, custom_styles['CustomHeading2']))
+                # Keep h2 with next paragraph only
+                story.append(KeepTogether([
+                    Paragraph(text, custom_styles['CustomHeading2']),
+                    Spacer(1, 4)
+                ]))
             elif line.startswith('### '):
                 text = clean_text(line[4:])
-                story.append(Paragraph(text, custom_styles['CustomHeading3']))
+                # Keep h3 with next paragraph only
+                story.append(KeepTogether([
+                    Paragraph(text, custom_styles['CustomHeading3']),
+                    Spacer(1, 4)
+                ]))
             # Handle bullet points with links
             elif line.startswith('* '):
                 in_list = True
@@ -165,13 +192,14 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 if in_list and current_list_items:
                     # Add the current list to the story
                     story.append(ListFlowable(
-                        [ListItem(Paragraph(item, custom_styles['CustomBody'])) for item in current_list_items],
+                        [ListItem(Paragraph(item, custom_styles['ListItem'])) for item in current_list_items],
                         bulletType='bullet',
                         leftIndent=20,
-                        spaceBefore=4,
-                        spaceAfter=4,
-                        bulletFontSize=8,
-                        bulletOffsetY=2
+                        bulletOffsetX=-6,
+                        bulletOffsetY=2,
+                        bulletFontSize=10,
+                        spaceBefore=6,
+                        spaceAfter=6
                     ))
                     current_list_items = []
                     in_list = False
@@ -180,13 +208,14 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
         # Add any remaining list items
         if current_list_items:
             story.append(ListFlowable(
-                [ListItem(Paragraph(item, custom_styles['CustomBody'])) for item in current_list_items],
+                [ListItem(Paragraph(item, custom_styles['ListItem'])) for item in current_list_items],
                 bulletType='bullet',
                 leftIndent=20,
-                spaceBefore=4,
-                spaceAfter=4,
-                bulletFontSize=8,
-                bulletOffsetY=2
+                bulletOffsetX=-6,
+                bulletOffsetY=2,
+                bulletFontSize=10,
+                spaceBefore=6,
+                spaceAfter=6
             ))
 
         # Build the PDF
