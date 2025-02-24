@@ -1,5 +1,7 @@
 # Tavily Company Research Platform 🔍
 
+![web ui](<static/ui-1.png>)
+
 An advanced, AI-powered research platform that automatically generates comprehensive company reports by analyzing multiple data sources. The platform uses a sophisticated pipeline of AI agents to gather, curate, and synthesize information about any company.
 
 ## Features ✨
@@ -30,6 +32,8 @@ The platform follows a modular architecture with specialized nodes that process 
    - `Curator`: Implements content filtering and relevance scoring
    - `Briefing`: Generates category-specific summaries using Gemini 2.0 Flash
    - `Editor`: Compiles and formats the final report using GPT-4
+
+   ![web ui](<static/agent-flow.png>)
 
 ### Content Generation Architecture 🤖
 
