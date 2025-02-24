@@ -112,43 +112,62 @@ The platform implements a WebSocket-based real-time communication system:
 
 ## Setup 🚀
 
-### Prerequisites
+### Quick Setup (Recommended)
 
-- Python 3.11+
-- Node.js 18+
-- API Keys:
-  - Tavily API Key
-  - Google Gemini API Key
-  - OpenAI API Key (for GPT-4)
-- Optional:
-  - MongoDB URI (for result persistence)
-
-### Installation
+The easiest way to get started is using the setup script:
 
 1. Clone the repository:
+```bash
+git clone https://github.com/pogjester/tavily-company-research.git
+cd tavily-company-research
+```
 
+2. Make the setup script executable and run it:
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+The setup script will:
+- Check for required Python and Node.js versions
+- Optionally create a Python virtual environment (recommended)
+- Install all dependencies (Python and Node.js)
+- Guide you through setting up your environment variables
+- Optionally start both backend and frontend servers
+
+You'll need the following API keys ready:
+- Tavily API Key
+- Google Gemini API Key
+- OpenAI API Key
+- MongoDB URI (optional)
+
+### Manual Setup
+
+If you prefer to set up manually, follow these steps:
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/pogjester/tavily-company-research.git
 cd tavily-company-research
 ```
 
 2. Install backend dependencies:
-
 ```bash
+# Optional: Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate
+
+# Install Python dependencies
 pip install -r requirements.txt
 ```
 
 3. Install frontend dependencies:
-
 ```bash
 cd ui
 npm install
 ```
 
 4. Create a `.env` file with your API keys:
-
 ```env
 TAVILY_API_KEY=your_tavily_key
 GEMINI_API_KEY=your_gemini_key
@@ -158,26 +177,24 @@ OPENAI_API_KEY=your_openai_key
 # MONGODB_URI=your_mongodb_connection_string
 ```
 
-### Database Configuration (Optional)
+### Running the Application
 
-The platform can optionally use MongoDB to persist research results and reports:
+1. Start the backend server (choose one):
+```bash
+# Option 1: Direct Python Module
+python -m application.py
 
-1. **Without MongoDB**: 
-   - The application runs in-memory only
-   - Research results are available only during the session
-   - Historical reports cannot be retrieved after server restart
+# Option 2: FastAPI with Uvicorn
+uvicorn application:app --reload --port 8000
+```
 
-2. **With MongoDB**:
-   - Set `MONGODB_URI` in your `.env` file
-   - Research results and reports are persisted
-   - Historical reports can be retrieved via API endpoints:
-     - GET `/research/{job_id}`: Retrieve job details
-     - GET `/research/{job_id}/report`: Retrieve report content
+2. In a new terminal, start the frontend:
+```bash
+cd ui
+npm run dev
+```
 
-To set up MongoDB:
-1. Create a MongoDB database (local or cloud)
-2. Get your connection string
-3. Add to `.env`: `MONGODB_URI=your_connection_string`
+3. Access the application at `http://localhost:5173`
 
 ## Usage 💡
 
@@ -196,7 +213,7 @@ To set up MongoDB:
    pip install uvicorn
 
    # Run the FastAPI application with hot reload
-   uvicorn backend.application:app --reload --port 8000
+   uvicorn application:app --reload --port 8000
    ```
 
    The backend will be available at:

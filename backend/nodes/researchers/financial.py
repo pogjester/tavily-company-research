@@ -73,7 +73,7 @@ class FinancialAnalyst(BaseResearcher):
                         status="processing",
                         message=f"Used Tavily Search to find {len(financial_data)} documents",
                         result={
-                            "step": "Search",
+                            "step": "Searching",
                             "analyst_type": "Financial Analyst",
                             "queries": queries
                         }
