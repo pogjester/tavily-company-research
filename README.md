@@ -45,7 +45,7 @@ The platform leverages a dual-model approach for optimal performance:
    - Used for generating initial category briefings
    - Efficient at maintaining context across multiple documents
 
-2. **GPT-4 Optimized** (`editor.py`):
+2. **GPT-4o-mini Optimized** (`editor.py`):
    - Specializes in precise formatting and editing tasks
    - Handles markdown structure and consistency
    - Superior at following exact formatting instructions
