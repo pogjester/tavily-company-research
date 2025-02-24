@@ -1033,15 +1033,26 @@ function App() {
               Enter company details to begin research
             </p>
           </div>
-          <a
-            href="https://github.com/pogjester"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`absolute top-0 right-0 text-gray-400 hover:text-white transition-colors ${glassStyle} p-2 rounded-lg`}
-            aria-label="GitHub Profile"
-          >
-            <Github className="h-6 w-6" />
-          </a>
+          <div className="absolute top-0 right-0 flex items-center space-x-2">
+            <a
+              href="https://tavily.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`text-gray-400 hover:text-white transition-colors ${glassStyle} w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden`}
+              aria-label="Tavily Website"
+            >
+              <img src="/tavilylogo.png" alt="Tavily Logo" className="w-full h-full object-cover" />
+            </a>
+            <a
+              href="https://github.com/pogjester"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`text-gray-400 hover:text-white transition-colors ${glassStyle} p-2 rounded-lg`}
+              aria-label="GitHub Profile"
+            >
+              <Github className="h-6 w-6" />
+            </a>
+          </div>
         </div>
 
         {/* Form Section */}
