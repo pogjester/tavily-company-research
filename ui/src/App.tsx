@@ -170,7 +170,7 @@ function App() {
 
   // Add state for section collapse
   const [isBriefingExpanded, setIsBriefingExpanded] = useState(true);
-  const [isCurationExpanded, setIsCurationExpanded] = useState(true);
+  const [] = useState(true);
   const [isEnrichmentExpanded, setIsEnrichmentExpanded] = useState(true);
 
   // Add state for phase tracking
@@ -178,7 +178,7 @@ function App() {
 
   // Add new state for PDF generation
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [, setPdfUrl] = useState<string | null>(null);
 
   const [isResetting, setIsResetting] = useState(false);
 
@@ -720,7 +720,6 @@ function App() {
   const glassButtonStyle = "w-full mt-6 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:from-blue-500 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm";
 
   // Add these to your existing styles
-  const fadeOutAnimation = "transition-all duration-300 ease-in-out";
   const fadeInAnimation = "transition-all duration-300 ease-in-out";
 
   // Function to render progress components in order
@@ -1027,10 +1026,10 @@ function App() {
         <div className="relative mb-12">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-3">
-              Company Researcher
+              Company Research Agent
             </h1>
             <p className="text-gray-400 text-lg">
-              Enter company details to begin research
+              Conduct in-depth company diligence using web-connected AI
             </p>
           </div>
           <div className="absolute top-0 right-0 flex items-center space-x-2">
