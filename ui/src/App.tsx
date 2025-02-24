@@ -143,16 +143,21 @@ function App() {
       news: false
     }
   });
+  const [originalCompanyName, setOriginalCompanyName] = useState<string>("");
 
   // Add ref for status section
   const statusRef = useRef<HTMLDivElement>(null);
 
-  // Add scroll helper function
+  // Add state to track initial scroll
+  const [hasScrolledToStatus, setHasScrolledToStatus] = useState(false);
+
+  // Modify the scroll helper function
   const scrollToStatus = () => {
-    if (statusRef.current) {
+    if (!hasScrolledToStatus && statusRef.current) {
       const yOffset = -100; // Add some padding at the top
       const y = statusRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: y, behavior: 'smooth' });
+      setHasScrolledToStatus(true);
     }
   };
 
@@ -174,6 +179,41 @@ function App() {
   // Add new state for PDF generation
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  const [isResetting, setIsResetting] = useState(false);
+
+  const resetResearch = () => {
+    setIsResetting(true);
+    
+    // Use setTimeout to create a smooth transition
+    setTimeout(() => {
+      setStatus(null);
+      setOutput(null);
+      setError(null);
+      setIsComplete(false);
+      setResearchState({
+        status: "idle",
+        message: "",
+        queries: [],
+        streamingQueries: {},
+        briefingStatus: {
+          company: false,
+          industry: false,
+          financial: false,
+          news: false
+        }
+      });
+      setPdfUrl(null);
+      setCurrentPhase(null);
+      setIsSearchPhase(false);
+      setShouldShowQueries(false);
+      setIsQueriesExpanded(true);
+      setIsBriefingExpanded(true);
+      setIsEnrichmentExpanded(true);
+      setIsResetting(false);
+      setHasScrolledToStatus(false); // Reset scroll flag when resetting research
+    }, 300); // Match this with CSS transition duration
+  };
 
   const connectWebSocket = (jobId: string) => {
     console.log("Initializing WebSocket connection for job:", jobId);
@@ -559,7 +599,16 @@ function App() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Form submitted");
+
+    // If research is complete, reset the UI first
+    if (isComplete) {
+      resetResearch();
+      await new Promise(resolve => setTimeout(resolve, 300)); // Wait for reset animation
+    }
+
     setIsResearching(true);
+    setOriginalCompanyName(formData.companyName);
+    setHasScrolledToStatus(false); // Reset scroll flag when starting new research
 
     try {
       const url = `${API_URL}/research`;
@@ -622,18 +671,37 @@ function App() {
     
     setIsGeneratingPdf(true);
     try {
-      const response = await fetch(`${API_URL}/research/${output.details.job_id}/generate-pdf`, {
+      console.log("Generating PDF with company name:", originalCompanyName);
+      const response = await fetch(`${API_URL}/generate-pdf`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          report_content: output.details.report,
+          company_name: originalCompanyName || output.details.company
+        }),
       });
       
       if (!response.ok) {
-        throw new Error('Failed to generate PDF');
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(errorData.detail || 'Failed to generate PDF');
       }
       
       const data = await response.json();
-      setPdfUrl(data.pdf_url);
+      
+      // Immediately trigger download
+      const downloadUrl = `${API_URL}${data.pdf_url}`;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = downloadUrl.split('/').pop() || 'research_report.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
     } catch (error) {
       console.error('Error generating PDF:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate PDF');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -651,6 +719,10 @@ function App() {
   const glassInputStyle = `${glassStyle} pl-10 w-full rounded-lg py-3 px-4 text-white shadow-sm focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder-gray-400 bg-white/5`;
   const glassButtonStyle = "w-full mt-6 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:from-blue-500 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 backdrop-blur-sm";
 
+  // Add these to your existing styles
+  const fadeOutAnimation = "transition-all duration-300 ease-in-out";
+  const fadeInAnimation = "transition-all duration-300 ease-in-out";
+
   // Function to render progress components in order
   const renderProgressComponents = () => {
     const components = [];
@@ -658,7 +730,10 @@ function App() {
     // Research Report (always at the top when available)
     if (output && output.details) {
       components.push(
-        <div key="report" className={`${glassCardStyle} transition-all duration-500 ease-in-out transform`}>
+        <div 
+          key="report" 
+          className={`${glassCardStyle} ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+        >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200">
               Research Results
@@ -674,19 +749,10 @@ function App() {
                     <Loader2 className="animate-spin h-4 w-4 mr-2" />
                     Generating PDF...
                   </>
-                ) : pdfUrl ? (
-                  <a
-                    href={`${API_URL}${pdfUrl}`}
-                    className="flex items-center"
-                    download="research_report.pdf"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download PDF
-                  </a>
                 ) : (
                   <>
                     <Download className="h-4 w-4 mr-2" />
-                    Generate PDF
+                    Download PDF
                   </>
                 )}
               </button>
@@ -765,7 +831,10 @@ function App() {
     // Current phase component
     if (currentPhase === 'briefing' || (currentPhase === 'complete' && researchState.briefingStatus)) {
       components.push(
-        <div key="briefing" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+        <div 
+          key="briefing" 
+          className={`${glassCardStyle} ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+        >
           <div 
             className="flex items-center justify-between cursor-pointer"
             onClick={() => setIsBriefingExpanded(!isBriefingExpanded)}
@@ -816,7 +885,10 @@ function App() {
 
     if (currentPhase === 'enrichment' || currentPhase === 'briefing' || currentPhase === 'complete') {
       components.push(
-        <div key="enrichment" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+        <div 
+          key="enrichment" 
+          className={`${glassCardStyle} ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+        >
           <div 
             className="flex items-center justify-between cursor-pointer"
             onClick={() => setIsEnrichmentExpanded(!isEnrichmentExpanded)}
@@ -878,7 +950,10 @@ function App() {
     // Queries are always at the bottom when visible
     if (shouldShowQueries && (researchState.queries.length > 0 || Object.keys(researchState.streamingQueries).length > 0)) {
       components.push(
-        <div key="queries" className={`${glassCardStyle} transition-all duration-500 ease-in-out`}>
+        <div 
+          key="queries" 
+          className={`${glassCardStyle} ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+        >
           <div 
             className="flex items-center justify-between cursor-pointer"
             onClick={() => setIsQueriesExpanded(!isQueriesExpanded)}
@@ -1104,14 +1179,19 @@ function App() {
 
         {/* Error Message */}
         {error && (
-          <div className={`${glassCardStyle} border-red-500/30 bg-red-900/20`}>
+          <div 
+            className={`${glassCardStyle} border-red-500/30 bg-red-900/20 ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+          >
             <p className="text-red-300">{error}</p>
           </div>
         )}
 
         {/* Status Box */}
         {status && (
-          <div ref={statusRef} className={glassCardStyle}>
+          <div 
+            ref={statusRef} 
+            className={`${glassCardStyle} ${fadeInAnimation} ${isResetting ? 'opacity-0 transform -translate-y-4' : 'opacity-100 transform translate-y-0'}`}
+          >
             <h2 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-200 mb-6">
               Research Status
             </h2>

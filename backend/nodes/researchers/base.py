@@ -1,5 +1,4 @@
 import os
-import asyncio
 from datetime import datetime
 from openai import AsyncOpenAI
 from tavily import AsyncTavilyClient
@@ -36,21 +35,25 @@ class BaseResearcher:
         industry = state.get("industry", "Unknown Industry")
         hq = state.get("hq", "Unknown HQ")
         current_year = datetime.now().year
+        websocket_manager = state.get('websocket_manager')
+        job_id = state.get('job_id')
         
         try:
             logger.info(f"Generating queries for {company} as {self.analyst_type}")
             
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{
-                    "role": "system",
-                    "content": f"You are researching {company}, a company in the {industry} industry."
-                },
-                {
-                    "role": "user",
-                    "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are researching {company}, a company in the {industry} industry."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Researching {company} on {datetime.now().strftime("%B %d, %Y")}.
 {self._format_query_prompt(prompt, company, hq, current_year)}"""
-                }],
+                    }
+                ],
                 temperature=0,
                 max_tokens=4096,
                 stream=True
@@ -59,8 +62,6 @@ class BaseResearcher:
             queries = []
             current_query = ""
             current_query_number = 1
-            websocket_manager = state.get('websocket_manager')
-            job_id = state.get('job_id')
 
             async for chunk in response:
                 if chunk.choices[0].finish_reason == "stop":
@@ -70,7 +71,7 @@ class BaseResearcher:
                 if content:
                     current_query += content
                     
-                    # Send the current state of the query being typed
+                    # Stream the current state to the UI.
                     if websocket_manager and job_id:
                         await websocket_manager.send_status_update(
                             job_id=job_id,
@@ -84,11 +85,10 @@ class BaseResearcher:
                             }
                         )
                     
-                    # If we detect a newline, we assume a complete query has been formed.
+                    # If a newline is detected, treat it as a complete query.
                     if '\n' in current_query:
                         parts = current_query.split('\n')
-                        # The last part may be an incomplete start for the next query.
-                        current_query = parts[-1]
+                        current_query = parts[-1]  # The last part is the start of the next query.
                         
                         for query in parts[:-1]:
                             query = query.strip()
@@ -108,15 +108,30 @@ class BaseResearcher:
                                     )
                                 current_query_number += 1
 
-            # NOTE: We intentionally do not add a final incomplete query.
-            # Only newline-terminated (i.e. complete) queries are used for search.
+            # Add any remaining query (even if not newline terminated)
+            if current_query.strip():
+                query = current_query.strip()
+                queries.append(query)
+                if websocket_manager and job_id:
+                    await websocket_manager.send_status_update(
+                        job_id=job_id,
+                        status="query_generated",
+                        message="Generated final research query",
+                        result={
+                            "query": query,
+                            "query_number": len(queries),
+                            "category": self.analyst_type,
+                            "is_complete": True
+                        }
+                    )
+                current_query_number += 1
             
             logger.info(f"Generated {len(queries)} queries for {self.analyst_type}: {queries}")
 
             if not queries:
                 raise ValueError(f"No queries generated for {company}")
 
-            # Only use at most 4 queries for search
+            # Limit to at most 4 queries.
             queries = queries[:4]
             logger.info(f"Final queries for {self.analyst_type}: {queries}")
             
@@ -156,7 +171,6 @@ class BaseResearcher:
             return {}
 
         try:
-            # Send query start status
             if websocket_manager and job_id:
                 await websocket_manager.send_status_update(
                     job_id=job_id,
@@ -190,7 +204,6 @@ class BaseResearcher:
                     "score": result.get("score", 0.0)
                 }
 
-            # Send query completion status
             if websocket_manager and job_id:
                 await websocket_manager.send_status_update(
                     job_id=job_id,
@@ -221,7 +234,10 @@ class BaseResearcher:
             return {}
 
     async def search_documents(self, state: ResearchState, queries: List[str]) -> Dict[str, Any]:
-        """Execute parallel searches for multiple queries with rate limiting."""
+        """
+        Instead of batching and running parallel searches,
+        simply output "Using Tavily search..." and iterate over each query one by one.
+        """
         websocket_manager = state.get('websocket_manager')
         job_id = state.get('job_id')
 
@@ -229,108 +245,29 @@ class BaseResearcher:
             await websocket_manager.send_status_update(
                 job_id=job_id,
                 status="processing",
-                message=f"Starting parallel search with {len(queries)} queries",
-                result={
-                    "step": "Searching",
-                    "total_queries": len(queries)
-                }
+                message="Using Tavily search...",
+                result={"step": "Searching", "total_queries": len(queries)}
             )
         
         if not queries:
             logger.error("No valid queries to search")
             return {}
 
-        # Filter and validate queries (only complete queries should be here)
-        valid_queries = [q for q in queries if isinstance(q, str) and len(q.split()) >= 3]
-        if not valid_queries:
-            logger.error("No valid queries after filtering")
-            return {}
-
-        try:
-            # Process searches in batches of 4 (parallel execution)
-            batch_size = 4  
-            query_batches = [valid_queries[i:i + batch_size] for i in range(0, len(valid_queries), batch_size)]
-            total_batches = len(query_batches)
-            
-            # Semaphore limits concurrent searches
-            search_semaphore = asyncio.Semaphore(4)  
-            
-            async def process_search_batch(batch_num: int, query_batch: List[str]) -> Dict[str, Any]:
-                async with search_semaphore:
-                    if websocket_manager and job_id:
-                        await websocket_manager.send_status_update(
-                            job_id=job_id,
-                            status="search_batch_start",
-                            message=f"Processing search batch {batch_num + 1}/{total_batches}",
-                            result={
-                                "step": "Searching",
-                                "batch": batch_num + 1,
-                                "total_batches": total_batches,
-                                "queries": query_batch
-                            }
-                        )
-                    
-                    batch_tasks = [
-                        self.search_single_query(query, websocket_manager, job_id) 
-                        for query in query_batch
-                    ]
-                    batch_results = await asyncio.gather(*batch_tasks)
-                    
-                    combined_results = {}
-                    for result in batch_results:
-                        combined_results.update(result)
-                    
-                    if websocket_manager and job_id:
-                        await websocket_manager.send_status_update(
-                            job_id=job_id,
-                            status="search_batch_complete",
-                            message=f"Completed search batch {batch_num + 1}/{total_batches}",
-                            result={
-                                "step": "Searching",
-                                "batch": batch_num + 1,
-                                "total_batches": total_batches,
-                                "documents_found": len(combined_results)
-                            }
-                        )
-                    
-                    return combined_results
-
-            batch_results = await asyncio.gather(*[
-                process_search_batch(i, batch)
-                for i, batch in enumerate(query_batches)
-            ])
-            
-            merged_docs = {}
-            for batch_result in batch_results:
-                merged_docs.update(batch_result)
-
-            if websocket_manager and job_id:
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="search_complete",
-                    message=f"Search completed with {len(merged_docs)} documents found",
-                    result={
-                        "step": "Searching",
-                        "total_documents": len(merged_docs),
-                        "queries_processed": len(valid_queries)
-                    }
-                )
-
-            if not merged_docs:
-                logger.error("No documents found from any query")
-            
-            return merged_docs
-
-        except Exception as e:
-            logger.error(f"Error during document search: {e}")
-            if websocket_manager and job_id:
-                await websocket_manager.send_status_update(
-                    job_id=job_id,
-                    status="search_error",
-                    message=f"Search failed: {str(e)}",
-                    result={
-                        "step": "Searching",
-                        "error": str(e)
-                    }
-                )
-            return {}
+        merged_docs = {}
+        for query in queries:
+            docs = await self.search_single_query(query, websocket_manager, job_id)
+            merged_docs.update(docs)
+        
+        if websocket_manager and job_id:
+            await websocket_manager.send_status_update(
+                job_id=job_id,
+                status="search_complete",
+                message=f"Search completed with {len(merged_docs)} documents found",
+                result={
+                    "step": "Searching",
+                    "total_documents": len(merged_docs),
+                    "queries_processed": len(queries)
+                }
+            )
+        
+        return merged_docs

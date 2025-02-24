@@ -73,6 +73,10 @@ class ResearchRequest(BaseModel):
     industry: str | None = None
     hq_location: str | None = None
 
+class PDFGenerationRequest(BaseModel):
+    report_content: str
+    company_name: str | None = None
+
 @app.options("/research")
 async def preflight():
     response = JSONResponse(content=None, status_code=200)
@@ -227,31 +231,110 @@ async def get_research_report(job_id: str):
 @app.post("/research/{job_id}/generate-pdf")
 async def generate_pdf(job_id: str):
     try:
-        if job_id not in job_status:
-            raise HTTPException(status_code=404, detail="Research job not found")
+        # First try to get report from memory
+        report_content = None
+        if job_id in job_status:
+            result = job_status[job_id]
+            if isinstance(result, dict):
+                report_content = result.get('report')
         
-        result = job_status[job_id]
-        if not isinstance(result, dict):
-            raise HTTPException(status_code=500, detail="Invalid research result format")
-
-        report_content = result.get('report')
+        # If not in memory and MongoDB is available, try to get from MongoDB
+        if not report_content and mongodb:
+            try:
+                report = mongodb.get_report(job_id)
+                if report and isinstance(report, dict):
+                    report_content = report.get('report')
+            except Exception as e:
+                logger.warning(f"Failed to get report from MongoDB: {e}")
+        
         if not report_content:
             raise HTTPException(status_code=404, detail="No report content available")
             
-        company_name = result.get('company', 'Unknown_Company')
+        # Get company name from memory or MongoDB
+        company_name = None
+        if job_id in job_status:
+            company_name = job_status[job_id].get('company')
+        if not company_name and mongodb:
+            try:
+                job = mongodb.get_job(job_id)
+                if job and isinstance(job, dict):
+                    company_name = job.get('company')
+            except Exception as e:
+                logger.warning(f"Failed to get company name from MongoDB: {e}")
+        
+        company_name = company_name or 'Unknown_Company'
         company_name = ''.join(c for c in company_name if c.isalnum() or c.isspace()).strip().replace(' ', '_')
         
         timestamp = datetime.now().strftime('%Y-%m-%d')
         pdf_filename = f"{company_name}_Research_Report_{timestamp}.pdf"
         pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
 
-        generate_pdf_from_md(report_content, pdf_path)
+        try:
+            generate_pdf_from_md(report_content, pdf_path)
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+            # Clean up failed PDF if it exists
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except Exception:
+                    pass
+            raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
         
         return JSONResponse({
             "status": "success",
             "pdf_url": f"/research/pdf/{pdf_filename}"
         })
         
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-pdf")
+async def generate_pdf_from_content(data: PDFGenerationRequest):
+    try:
+        company_name = None
+        
+        # First try to get company name from the request
+        if data.company_name:
+            company_name = data.company_name
+        
+        # If not provided, try to find it in job_status by searching for matching report content
+        if not company_name:
+            for job_id, status in job_status.items():
+                if isinstance(status, dict) and status.get('report') == data.report_content:
+                    company_name = status.get('company')
+                    if company_name:
+                        break
+        
+        company_name = company_name or 'Unknown_Company'
+        company_name = ''.join(c for c in company_name if c.isalnum() or c.isspace()).strip().replace(' ', '_')
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        pdf_filename = f"{company_name}_Research_Report_{timestamp}.pdf"
+        pdf_path = os.path.join(REPORTS_DIR, pdf_filename)
+
+        try:
+            generate_pdf_from_md(data.report_content, pdf_path)
+        except Exception as e:
+            logger.error(f"PDF generation failed: {e}")
+            # Clean up failed PDF if it exists
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except Exception:
+                    pass
+            raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+        
+        return JSONResponse({
+            "status": "success",
+            "pdf_url": f"/research/pdf/{pdf_filename}"
+        })
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"PDF generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
