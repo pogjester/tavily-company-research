@@ -1043,6 +1043,15 @@ function App() {
               <img src="/tavilylogo.png" alt="Tavily Logo" className="w-full h-full object-cover" />
             </a>
             <a
+              href="https://www.langchain.com/langgraph"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`text-gray-400 hover:text-white transition-colors ${glassStyle} w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden bg-white`}
+              aria-label="LangGraph Website"
+            >
+              <img src="/langgraphlogo.png" alt="LangGraph Logo" className="w-full h-full object-cover" />
+            </a>
+            <a
               href="https://github.com/pogjester"
               target="_blank"
               rel="noopener noreferrer"
