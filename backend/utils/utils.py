@@ -64,8 +64,8 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 'MainTitle',
                 parent=styles['Heading1'],
                 fontSize=24,
-                spaceAfter=20,
-                spaceBefore=10,
+                spaceAfter=16,
+                spaceBefore=5,
                 textColor=colors.HexColor('#1a1a1a'),
                 leading=28
             ),
@@ -81,11 +81,13 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
             'CustomHeading3': ParagraphStyle(
                 'CustomHeading3',
                 parent=styles['Heading3'],
-                fontSize=14,
-                spaceBefore=12,
-                spaceAfter=6,
-                textColor=colors.HexColor('#34495e'),
-                leading=18
+                fontSize=16,
+                spaceBefore=16,
+                spaceAfter=8,
+                textColor=colors.HexColor('#3B82F6'),  # Light blue
+                leading=22,
+                fontName='Helvetica-Bold',
+                italic=0  # Remove italics
             ),
             'CustomBody': ParagraphStyle(
                 'CustomBody',
