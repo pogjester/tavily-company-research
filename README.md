@@ -143,7 +143,7 @@ pip install -r requirements.txt
 3. Install frontend dependencies:
 
 ```bash
-cd simple-frontend
+cd ui
 npm install
 ```
 
@@ -187,7 +187,7 @@ To set up MongoDB:
 
    **Option 1: Direct Python Module**
    ```bash
-   python -m backend.main
+   python -m application.py
    ```
 
    **Option 2: FastAPI with Uvicorn**
@@ -201,12 +201,11 @@ To set up MongoDB:
 
    The backend will be available at:
    - API Endpoint: `http://localhost:8000`
-   - API Documentation: `http://localhost:8000/docs`
    - WebSocket Endpoint: `ws://localhost:8000/research/ws/{job_id}`
 
 2. Start the frontend development server:
    ```bash
-   cd simple-frontend
+   cd ui
    npm run dev
    ```
 
