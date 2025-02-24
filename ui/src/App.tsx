@@ -154,7 +154,7 @@ function App() {
   // Modify the scroll helper function
   const scrollToStatus = () => {
     if (!hasScrolledToStatus && statusRef.current) {
-      const yOffset = -100; // Add some padding at the top
+      const yOffset = -20; // Reduced negative offset to scroll further down
       const y = statusRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: y, behavior: 'smooth' });
       setHasScrolledToStatus(true);
