@@ -128,7 +128,7 @@ The platform implements a WebSocket-based real-time communication system:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/tavily-company-research.git
+git clone https://github.com/pogjester/tavily-company-research.git
 cd tavily-company-research
 ```
 
@@ -136,7 +136,7 @@ cd tavily-company-research
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
