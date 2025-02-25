@@ -55,8 +55,10 @@ def clean_text(text: str) -> str:
     text = re.sub(r'",?\s*"pdf_url":.+$', '', text)
     # Replace escaped quotes with regular quotes
     text = text.replace('\\"', '"')
-    # Replace multiple spaces with a single space, but preserve spaces after asterisks
-    text = re.sub(r'(?<!\*)\s+', ' ', text)
+    # Convert literal \n to actual newlines
+    text = text.replace('\\n', '\n')
+    # Preserve bullet points by not cleaning spaces after asterisks
+    text = re.sub(r'(?<!\*)\s+(?!\*)', ' ', text)
     # Remove any XML/para tags as they'll be added during processing
     text = text.replace('<para>', '').replace('</para>', '')
     return text.strip()
@@ -66,6 +68,10 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
     try:
         # Ensure output directory exists
         os.makedirs(os.path.dirname(os.path.abspath(output_pdf)), exist_ok=True)
+        
+        # Normalize line endings and split into lines
+        markdown_content = markdown_content.replace('\r\n', '\n')  # Normalize Windows line endings
+        markdown_content = markdown_content.replace('\\n', '\n')   # Convert literal \n to newlines
         
         # Extract company name from the first line if it starts with # 
         company_name = "Company Research Report"
@@ -177,24 +183,41 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
         
         def process_markdown_formatting(text):
             """Convert **bold** and *italic* markers to ReportLab tags and auto-hyperlink URLs."""
-            # First handle URLs before any other processing, but only if they're not already in a link tag
-            if '<link' not in text:
-                text = re.sub(
-                    r'(https?://[^\s<>"]+)',
-                    lambda m: f'<link href="{m.group(1)}" color="blue" textColor="blue"><u>{m.group(1)}</u></link>',
-                    text
-                )
-            
-            # Process bold text (but not bullet points)
-            text = re.sub(r'(?<!\*)\*\*(.*?)\*\*(?!\*)', lambda m: f'<b>{m.group(1)}</b>', text)
-            
-            # Process italic text (but not bullet points)
-            text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', lambda m: f'<i>{m.group(1)}</i>', text)
-            
-            # Clean up any remaining double asterisks (bold markers)
-            text = text.replace('**', '')
-            
-            # Do NOT remove single asterisks as they might be bullet points
+            # First check if this is a bullet point line
+            if text.lstrip().startswith('* '):
+                # Don't process the bullet point marker
+                prefix = text[:text.find('* ') + 2]  # Keep the spaces and bullet intact
+                rest = text[text.find('* ') + 2:]    # Process the rest of the line
+                
+                # Process the rest of the line normally
+                if rest.startswith('[') and '](' in rest and rest.endswith(')'):
+                    # It's a link bullet
+                    title, url = extract_link_info(rest)
+                    rest = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
+                else:
+                    # Handle other formatting in the bullet text
+                    if '<link' not in rest:
+                        rest = re.sub(
+                            r'(https?://[^\s<>"]+)',
+                            lambda m: f'<link href="{m.group(1)}" color="blue" textColor="blue"><u>{m.group(1)}</u></link>',
+                            rest
+                        )
+                    rest = re.sub(r'\*\*(.*?)\*\*', lambda m: f'<b>{m.group(1)}</b>', rest)
+                    rest = re.sub(r'\*(.*?)\*', lambda m: f'<i>{m.group(1)}</i>', rest)
+                    rest = rest.replace('**', '')
+                
+                text = prefix + rest
+            else:
+                # Not a bullet point - process normally
+                if '<link' not in text:
+                    text = re.sub(
+                        r'(https?://[^\s<>"]+)',
+                        lambda m: f'<link href="{m.group(1)}" color="blue" textColor="blue"><u>{m.group(1)}</u></link>',
+                        text
+                    )
+                text = re.sub(r'\*\*(.*?)\*\*', lambda m: f'<b>{m.group(1)}</b>', text)
+                text = re.sub(r'\*(.*?)\*', lambda m: f'<i>{m.group(1)}</i>', text)
+                text = text.replace('**', '')
             
             # Ensure proper XML structure
             if not text.startswith('<para>'):
@@ -282,150 +305,44 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
                 ]))
 
             # Handle bullet points
-            elif line.startswith('* '):
+            elif line.startswith('* ') or (line.strip() and line.strip().startswith('* ')):
+                # Clean up the line and ensure proper bullet point format
+                line = line.strip()
                 bullet_text = line[2:].strip()  # Remove the '* ' but keep any other asterisks
-
-                # If we have been building a bullet list, we'll continue
-                # but in the original code, we tried to add them immediately.
-                # We'll do immediate addition in this approach:
                 
-                if in_references:
-                    # For references, we can look for MLA-style or standard link
-                    # Attempt MLA pattern: (site)."Title." [text](URL)
-                    mla_match = re.match(r'(.*?)\.\s*"(.*?)\."\s*\[(.*?)\]\((.*?)\)', bullet_text)
-                    if mla_match:
-                        website = clean_text(mla_match.group(1))
-                        title = clean_text(mla_match.group(2))
-                        url = clean_text(mla_match.group(4))
-                        
-                        # If website is empty, try from URL
-                        if not website or website == ".":
-                            website = extract_domain_name(url)
-                        if not title or title == ".":
-                            title = extract_title_from_url_path(url) or f"Information from {website}"
-                        
-                        # Don't process the URL again since it's already a raw URL
-                        ref_text = f'{website}. "{title}." <link href="{url}" color="blue" textColor="blue"><u>{url}</u></link>'
-                        reference_section.append(ListFlowable(
-                            [
-                                ListItem(
-                                    Paragraph(ref_text, custom_styles['Reference']),
-                                    value='bullet',
-                                    leftIndent=20,
-                                    bulletColor=colors.HexColor('#2c3e50'),
-                                    bulletType='bullet',
-                                    bulletFontName='Helvetica',
-                                    bulletFontSize=10
-                                )
-                            ],
-                            bulletType='bullet',
-                            leftIndent=20,
-                            bulletOffsetX=10,
-                            bulletOffsetY=2,
-                            bulletFontSize=12,
-                            bulletColor=colors.HexColor('#2c3e50'),
-                            bulletDedent=20,
-                            bulletFormat='•',
-                            spaceBefore=4,
-                            spaceAfter=4
-                        ))
-                        # Add spacing between references
-                        reference_section.append(Spacer(1, 8))
-                    else:
-                        # Possibly standard link format [title](url)
-                        link_match = re.match(r'\[(.*?)\]\((.*?)\)', bullet_text)
-                        if link_match:
-                            url = clean_text(link_match.group(2))
-                            website = extract_domain_name(url)
-                            # Don't process the URL again since it's already a raw URL
-                            ref_text = f'{website}. <link href="{url}" color="blue" textColor="blue"><u>{url}</u></link>'
-                            reference_section.append(ListFlowable(
-                                [
-                                    ListItem(
-                                        Paragraph(ref_text, custom_styles['Reference']),
-                                        value='bullet',
-                                        leftIndent=20,
-                                        bulletColor=colors.HexColor('#2c3e50'),
-                                        bulletType='bullet',
-                                        bulletFontName='Helvetica',
-                                        bulletFontSize=10
-                                    )
-                                ],
-                                bulletType='bullet',
-                                leftIndent=20,
-                                bulletOffsetX=10,
-                                bulletOffsetY=2,
-                                bulletFontSize=12,
-                                bulletColor=colors.HexColor('#2c3e50'),
-                                bulletDedent=20,
-                                bulletFormat='•',
-                                spaceBefore=4,
-                                spaceAfter=4
-                            ))
-                            # Add spacing between references
-                            reference_section.append(Spacer(1, 8))
-                        else:
-                            # Just treat it as a normal reference line
-                            bullet_text = process_markdown_formatting(bullet_text)
-                            reference_section.append(ListFlowable(
-                                [
-                                    ListItem(
-                                        Paragraph(bullet_text, custom_styles['Reference']),
-                                        value='bullet',
-                                        leftIndent=20,
-                                        bulletColor=colors.HexColor('#2c3e50'),
-                                        bulletType='bullet',
-                                        bulletFontName='Helvetica',
-                                        bulletFontSize=10
-                                    )
-                                ],
-                                bulletType='bullet',
-                                leftIndent=20,
-                                bulletOffsetX=10,
-                                bulletOffsetY=2,
-                                bulletFontSize=12,
-                                bulletColor=colors.HexColor('#2c3e50'),
-                                bulletDedent=20,
-                                bulletFormat='•',
-                                spaceBefore=4,
-                                spaceAfter=4
-                            ))
-                            # Add spacing between references
-                            reference_section.append(Spacer(1, 8))
+                # For non-references bullet points
+                if bullet_text.startswith('[') and '](' in bullet_text and bullet_text.endswith(')'):
+                    # It's a link bullet
+                    title, url = extract_link_info(bullet_text)
+                    bullet_text = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
                 else:
-                    # For non-references bullet points
-                    if bullet_text.startswith('[') and '](' in bullet_text and bullet_text.endswith(')'):
-                        # It's a link bullet
-                        title, url = extract_link_info(bullet_text)
-                        # Don't process the URL again since it's already a raw URL
-                        bullet_text = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
-                    else:
-                        # Only process non-link text
-                        bullet_text = process_markdown_formatting(bullet_text)
+                    # Only process non-link text
+                    bullet_text = process_markdown_formatting(bullet_text)
 
-                    # We'll add it immediately as a single bullet item
-                    story.append(ListFlowable(
-                        [
-                            ListItem(
-                                Paragraph(bullet_text, custom_styles['ListItem']),
-                                value='bullet',
-                                leftIndent=20,
-                                bulletColor=colors.HexColor('#2c3e50'),
-                                bulletType='bullet',
-                                bulletFontName='Helvetica',
-                                bulletFontSize=10
-                            )
-                        ],
-                        bulletType='bullet',
-                        leftIndent=20,
-                        bulletOffsetX=10,
-                        bulletOffsetY=2,
-                        start=None,
-                        bulletDedent=20,
-                        bulletFormat='•',
-                        spaceBefore=4,
-                        spaceAfter=4
-                    ))
+                # Add it immediately as a single bullet item with explicit bullet styling
+                story.append(ListFlowable(
+                    [
+                        ListItem(
+                            Paragraph(bullet_text, custom_styles['ListItem']),
+                            value='bullet',
+                            leftIndent=20,
+                            bulletColor=colors.HexColor('#2c3e50'),
+                            bulletType='bullet',
+                            bulletFontName='Helvetica',
+                            bulletFontSize=10,
+                            bulletFormat='•'
+                        )
+                    ],
+                    bulletType='bullet',
+                    leftIndent=20,
+                    bulletOffsetX=10,
+                    bulletOffsetY=2,
+                    start=None,
+                    bulletDedent=20,
+                    bulletFormat='•',
+                    spaceBefore=4,
+                    spaceAfter=4
+                ))
 
             # Handle standalone Markdown links
             elif line.startswith('[') and '](' in line and line.endswith(')'):
@@ -533,14 +450,11 @@ def convert_markdown_to_pdf_elements(markdown_text: str, custom_styles: Dict) ->
 
     def process_markdown_formatting(text):
         # Bold
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        # Italic
-        text = re.sub(
-            r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)',
-            r'<i>\1</i>',
-            text
-        )
-        text = text.replace('**', '').replace('*', '')
+        text = re.sub(r'(?<!\*)\*\*(.*?)\*\*(?!\*)', r'<b>\1</b>', text)
+        # Italic - only match *text* that's not at the start of a line and not a bullet point
+        text = re.sub(r'(?<!^)(?<!\s)\*(.*?)\*(?!\s)', r'<i>\1</i>', text)
+        # Clean up any remaining double asterisks (bold markers) but preserve single asterisks for bullet points
+        text = text.replace('**', '')
         return text
 
     while i < len(lines):
@@ -620,24 +534,42 @@ def convert_markdown_to_pdf_elements(markdown_text: str, custom_styles: Dict) ->
             continue
 
         # Bullets
-        if line.startswith('* ') or line.startswith('- '):
-            in_list = True
-            bullet_text = line[2:].strip()
-            bullet_text = clean_text(bullet_text)
-            bullet_text = process_markdown_formatting(bullet_text)
-
-            # If there's a link
+        if line.startswith('* '):
+            bullet_text = line[2:].strip()  # Remove the '* ' but keep any other asterisks
+            
+            # For non-references bullet points
             if bullet_text.startswith('[') and '](' in bullet_text and bullet_text.endswith(')'):
-                link_title, link_url = extract_link_info(bullet_text)
-                # Don't process the URL again since it's already a raw URL
+                # It's a link bullet
+                title, url = extract_link_info(bullet_text)
                 bullet_text = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
             else:
                 # Only process non-link text
                 bullet_text = process_markdown_formatting(bullet_text)
 
-            current_list_items.append(bullet_text)
-            i += 1
-            continue
+            # Add it immediately as a single bullet item with explicit bullet styling
+            story.append(ListFlowable(
+                [
+                    ListItem(
+                        Paragraph(bullet_text, custom_styles['ListItem']),
+                        value='bullet',
+                        leftIndent=20,
+                        bulletColor=colors.HexColor('#2c3e50'),
+                        bulletType='bullet',
+                        bulletFontName='Helvetica',
+                        bulletFontSize=10,
+                        bulletFormat='•'
+                    )
+                ],
+                bulletType='bullet',
+                leftIndent=20,
+                bulletOffsetX=10,
+                bulletOffsetY=2,
+                start=None,
+                bulletDedent=20,
+                bulletFormat='•',
+                spaceBefore=4,
+                spaceAfter=4
+            ))
 
         # If we were in a list but found something else
         if in_list and current_list_items:
