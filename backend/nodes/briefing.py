@@ -1,5 +1,3 @@
-from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 import google.generativeai as genai
 from typing import Dict, Any, Union, List
 import os
@@ -28,6 +26,7 @@ class Briefing:
     ) -> Dict[str, Any]:
         company = context.get('company', 'Unknown')
         industry = context.get('industry', 'Unknown')
+        hq_location = context.get('hq_location', 'Unknown')
         logger.info(f"Generating {category} briefing for {company} using {len(docs)} documents")
 
         # Send category start status
@@ -45,7 +44,7 @@ class Briefing:
                 )
 
         prompts = {
-            'company': f"""Create a focused company briefing for {company}.
+            'company': f"""Create a focused company briefing for {company}, a {industry} company based in {hq_location}.
 Key requirements:
 1. Start with: "{company} is a [what] that [does what] for [whom]"
 2. Structure using these exact headers and bullet points:
@@ -76,7 +75,7 @@ Key requirements:
 5. No paragraphs, only bullet points
 6. Provide only the briefing. No explanations or commentary.""",
 
-            'industry': f"""Analyze {company}'s market position.
+            'industry': f"""Create a focused industry briefing for {company}, a {industry} company based in {hq_location}.
 Key requirements:
 1. Structure using these exact headers and bullet points:
 
@@ -102,7 +101,7 @@ Key requirements:
 4. Never mention "no information found" or "no data available"
 5. Provide only the briefing. No explanation.""",
 
-            'financial': f"""List {company}'s financial information.
+            'financial': f"""Create a focused financial briefing for {company}, a {industry} company based in {hq_location}.
 Key requirements:
 1. Structure using these headers and bullet points:
 
@@ -119,7 +118,7 @@ Key requirements:
 4. Never mention "no information found" or "no data available"
 5. Provide only the briefing. No explanation or commentary.""",
 
-            'news': f"""List verified {company} news.
+            'news': f"""Create a focused news briefing for {company}, a {industry} company based in {hq_location}.
 Key requirements:
 1. Structure into these categories using bullet points:
 

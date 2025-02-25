@@ -47,19 +47,21 @@ class Enricher:
                 return {url: result['results'][0].get('raw_content', '')}
         except Exception as e:
             print(f"Error fetching raw content for {url}: {e}")
+            error_msg = str(e)
             if websocket_manager and job_id:
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="extraction_error",
-                    message=f"Failed to extract content from {url}: {str(e)}",
+                    message=f"Failed to extract content from {url}: {error_msg}",
                     result={
                         "step": "Enriching",
                         "url": url,
                         "category": category,
                         "success": False,
-                        "error": str(e)
+                        "error": error_msg
                     }
                 )
+            return {url: '', "error": error_msg}
         return {url: ''}
 
     async def fetch_raw_content(self, urls: List[str], websocket_manager=None, job_id=None, category=None) -> Dict[str, str]:
@@ -129,6 +131,7 @@ class Enricher:
             )
 
         msg = [f"📚 Enriching curated data for {company}:"]
+        extraction_errors = []
 
         # Process each type of curated data
         data_types = {
@@ -190,9 +193,16 @@ class Enricher:
                 )
                 
                 enriched_count = 0
-                for url, raw_content in raw_contents.items():
-                    if raw_content:
-                        task['curated_docs'][url]['raw_content'] = raw_content
+                error_count = 0
+                
+                for url, content_or_error in raw_contents.items():
+                    if isinstance(content_or_error, dict) and content_or_error.get('error'):
+                        # This is an error result
+                        extraction_errors.append(f"{url}: {content_or_error['error']}")
+                        error_count += 1
+                    elif content_or_error:
+                        # This is a successful content
+                        task['curated_docs'][url]['raw_content'] = content_or_error
                         enriched_count += 1
 
                 # Update state with enriched documents
@@ -214,7 +224,8 @@ class Enricher:
                 return {
                     'category': task['category'],
                     'enriched': enriched_count,
-                    'total': len(task['docs'])
+                    'total': len(task['docs']),
+                    'errors': error_count
                 }
 
             # Process all categories in parallel
@@ -223,17 +234,23 @@ class Enricher:
             # Calculate totals
             total_enriched = sum(r['enriched'] for r in results)
             total_documents = sum(r['total'] for r in results)
+            total_errors = sum(r.get('errors', 0) for r in results)
 
-            # Send final status update
+            # Send final status update with error information
             if websocket_manager and job_id:
+                status_message = f"Content enrichment complete. Successfully enriched {total_enriched}/{total_documents} documents"
+                if total_errors > 0:
+                    status_message += f". Failed to extract {total_errors} documents."
+                
                 await websocket_manager.send_status_update(
                     job_id=job_id,
                     status="enrichment_complete",
-                    message=f"Content enrichment complete. Successfully enriched {total_enriched}/{total_documents} documents",
+                    message=status_message,
                     result={
                         "step": "Enriching",
                         "total_enriched": total_enriched,
-                        "total_documents": total_documents
+                        "total_documents": total_documents,
+                        "total_errors": total_errors
                     }
                 )
 
@@ -242,6 +259,10 @@ class Enricher:
         messages.append(AIMessage(content="\n".join(msg)))
         state['messages'] = messages
 
+        # Check if there were any errors during enrichment
+        if extraction_errors:
+            state['error'] = f"Failed to extract content from {len(extraction_errors)} URLs: {', '.join(extraction_errors)}"
+        
         return state
 
     async def run(self, state: ResearchState) -> ResearchState:

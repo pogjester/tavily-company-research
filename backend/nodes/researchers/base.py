@@ -5,6 +5,7 @@ from tavily import AsyncTavilyClient
 from ...classes import ResearchState
 from typing import Dict, Any, List
 import logging
+from ...utils.references import clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -195,8 +196,19 @@ class BaseResearcher:
                     continue
                     
                 url = result.get("url")
+                title = result.get("title", "")
+                
+                # Clean up and validate the title using the references module
+                if title:
+                    title = clean_title(title)
+                    # If title is the same as URL or empty, set to empty to trigger extraction later
+                    if title.lower() == url.lower() or not title.strip():
+                        title = ""
+                
+                logger.info(f"Tavily search result for '{query}': URL={url}, Title='{title}'")
+                
                 docs[url] = {
-                    "title": result.get("title", ""),
+                    "title": title,
                     "content": result.get("content", ""),
                     "query": query,
                     "url": url,

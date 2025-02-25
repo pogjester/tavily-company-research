@@ -4,6 +4,7 @@ import os
 from ..classes import ResearchState
 from urllib.parse import urlparse, urljoin
 import logging
+from ..utils.references import process_references_from_search_results
 
 logger = logging.getLogger(__name__)
 
@@ -29,47 +30,57 @@ class Curator:
         if not docs:
             return []
 
-        print(f"\nDebug: Evaluating {len(docs)} documents")
+        logger.info(f"Evaluating {len(docs)} documents")
         
         evaluated_docs = []
         try:
             # Evaluate each document using Tavily's score
             for doc in docs:
-                tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
-                
-                # Keep documents with good Tavily score
-                if tavily_score >= self.relevance_threshold:  # Adjusted threshold since we're only using Tavily
-                    print(f"\nDocument score: {tavily_score:.3f} for '{doc.get('title', 'No title')}'")
+                try:
+                    # Ensure score is a valid float
+                    tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
                     
-                    evaluated_doc = {
-                        **doc,
-                        "evaluation": {
-                            "overall_score": tavily_score,
-                            "query": doc.get('query', '')
+                    # Keep documents with good Tavily score
+                    if tavily_score >= self.relevance_threshold:
+                        logger.info(f"Document passed threshold with score {tavily_score:.4f} for '{doc.get('title', 'No title')}'")
+                        
+                        evaluated_doc = {
+                            **doc,
+                            "evaluation": {
+                                "overall_score": tavily_score,  # Store as float
+                                "query": doc.get('query', '')
+                            }
                         }
-                    }
-                    evaluated_docs.append(evaluated_doc)
-                    
-                    # Send incremental update for kept document
-                    if websocket_manager := state.get('websocket_manager'):
-                        if job_id := state.get('job_id'):
-                            await websocket_manager.send_status_update(
-                                job_id=job_id,
-                                status="document_kept",
-                                message=f"Kept document: {doc.get('title', 'No title')}",
-                                result={
-                                    "step": "Curation",
-                                    "doc_type": doc.get('doc_type', 'unknown'),
-                                    "title": doc.get('title', 'No title')
-                                }
-                            )
-                else:
-                    print(f"Skipping document with low score ({tavily_score:.3f}): {doc.get('title', 'No title')}")
+                        evaluated_docs.append(evaluated_doc)
+                        
+                        # Send incremental update for kept document
+                        if websocket_manager := state.get('websocket_manager'):
+                            if job_id := state.get('job_id'):
+                                await websocket_manager.send_status_update(
+                                    job_id=job_id,
+                                    status="document_kept",
+                                    message=f"Kept document: {doc.get('title', 'No title')}",
+                                    result={
+                                        "step": "Curation",
+                                        "doc_type": doc.get('doc_type', 'unknown'),
+                                        "title": doc.get('title', 'No title'),
+                                        "score": tavily_score
+                                    }
+                                )
+                    else:
+                        logger.info(f"Document below threshold with score {tavily_score:.4f} for '{doc.get('title', 'No title')}'")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error processing score for document: {e}")
+                    continue
                     
         except Exception as e:
-            print(f"Error during document evaluation: {e}")
+            logger.error(f"Error during document evaluation: {e}")
             return []
 
+        # Sort evaluated docs by score before returning
+        evaluated_docs.sort(key=lambda x: float(x['evaluation']['overall_score']), reverse=True)
+        logger.info(f"Returning {len(evaluated_docs)} evaluated documents")
+        
         return evaluated_docs
 
     async def curate_data(self, state: ResearchState) -> ResearchState:
@@ -139,7 +150,6 @@ class Curator:
 
         # Track document counts for each type
         doc_counts = {}
-        all_top_references = []
 
         for data_field, emoji, doc_type, urls, docs in curation_tasks:
             msg.append(f"\n{emoji}: Found {len(docs)} documents")
@@ -168,7 +178,7 @@ class Curator:
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs)}
             sorted_items = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
             
-            # Limit to top 15 documents
+            # Limit to top 30 documents per category
             if len(sorted_items) > 30:
                 sorted_items = sorted_items[:30]
             relevant_docs = dict(sorted_items)
@@ -180,57 +190,17 @@ class Curator:
 
             if relevant_docs:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
+                logger.info(f"Kept {len(relevant_docs)} documents for {doc_type} with scores above threshold")
             else:
                 msg.append(f"  ⚠️ No documents met relevance threshold")
+                logger.info(f"No documents met relevance threshold for {doc_type}")
 
-            # Collect references with scores
-            current_references = [(url, doc['evaluation']['overall_score']) 
-                                for url, doc in relevant_docs.items()]
-            all_top_references.extend(current_references)
-
+            # Store curated documents in state
             state[f'curated_{data_field}'] = relevant_docs
-
-        # Sort references by score and select top 10
-        all_top_references.sort(key=lambda x: x[1], reverse=True)
-        
-        # Use a set to store unique URLs, keeping only the highest scored version of each URL
-        seen_urls = set()
-        unique_references = []
-        reference_titles = {}  # Store titles for references
-        
-        for url, score in all_top_references:
-            # Skip if URL is not valid
-            if not url or not url.startswith(('http://', 'https://')):
-                continue
-
-            # Normalize URL by removing trailing slashes and query parameters
-            try:
-                parsed = urlparse(url)
-                normalized_url = parsed._replace(query='', fragment='').geturl().rstrip('/')
-                if not normalized_url.startswith('http'):
-                    normalized_url = 'https://' + normalized_url
-                
-                if normalized_url not in seen_urls:
-                    seen_urls.add(normalized_url)
-                    unique_references.append((normalized_url, score))
-                    
-                    # Find and store the title for this URL
-                    for data_type in ['curated_company_data', 'curated_industry_data', 'curated_financial_data', 'curated_news_data']:
-                        if curated_data := state.get(data_type, {}):
-                            for doc in curated_data.values():
-                                if doc.get('url') == url:
-                                    reference_titles[normalized_url] = doc.get('title', '')
-                                    break
-            except Exception as e:
-                logger.error(f"Error normalizing URL {url}: {e}")
-                continue
-        
-        # Take exactly 10 unique references (or all if less than 10)
-        top_references = unique_references[:10]
-        top_reference_urls = [url for url, _ in top_references]
-        
-        # Log the number of references found
-        logger.info(f"Found {len(top_reference_urls)} unique references")
+            
+        # Process references using the references module
+        top_reference_urls, reference_titles, reference_info = process_references_from_search_results(state)
+        logger.info(f"Selected top {len(top_reference_urls)} references for the report")
         
         # Update state with references and their titles
         messages = state.get('messages', [])
@@ -238,6 +208,7 @@ class Curator:
         state['messages'] = messages
         state['references'] = top_reference_urls
         state['reference_titles'] = reference_titles
+        state['reference_info'] = reference_info
 
         # Send final curation stats
         if websocket_manager := state.get('websocket_manager'):
