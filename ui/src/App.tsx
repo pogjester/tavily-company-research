@@ -555,11 +555,17 @@ function App() {
           scrollToStatus();
         } else if (
           statusData.status === "failed" ||
-          statusData.status === "error"
+          statusData.status === "error" ||
+          statusData.status === "website_error"
         ) {
-          setError(statusData.error || "Research failed");
-          setIsResearching(false);
-          setIsComplete(false);
+          setError(statusData.error || statusData.message || "Research failed");
+          if (statusData.status === "website_error" && statusData.result?.continue_research) {
+            // Don't stop research on website error if continue_research is true
+            console.log("Continuing research despite website error:", statusData.error);
+          } else {
+            setIsResearching(false);
+            setIsComplete(false);
+          }
         }
       }
     };

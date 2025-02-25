@@ -159,11 +159,17 @@ async def process_research(job_id: str, data: ResearchRequest):
         else:
             logger.error(f"Research completed without finding report. State keys: {list(state.keys())}")
             logger.error(f"Editor state: {state.get('editor', {})}")
+            
+            # Check if there was a specific error in the state
+            error_message = "No report found"
+            if error := state.get('error'):
+                error_message = f"Error: {error}"
+            
             await manager.send_status_update(
                 job_id=job_id,
                 status="failed",
                 message="Research completed but no report was generated",
-                error="No report found"
+                error=error_message
             )
 
     except Exception as e:

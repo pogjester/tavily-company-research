@@ -85,17 +85,22 @@ class GroundingNode:
                                 result={"step": "Initial Site Scrape"}
                             )
             except Exception as e:
-                logger.error(f"Website extraction error: {str(e)}", exc_info=True)
-                error_msg = f"⚠️ Error extracting website content: {str(e)}"
+                error_str = str(e)
+                logger.error(f"Website extraction error: {error_str}", exc_info=True)
+                error_msg = f"⚠️ Error extracting website content: {error_str}"
                 print(error_msg)
                 msg += f"\n{error_msg}"
                 if websocket_manager := state.get('websocket_manager'):
                     if job_id := state.get('job_id'):
                         await websocket_manager.send_status_update(
                             job_id=job_id,
-                            status="failed",
-                            message="⚠️ Error extracting website content",
-                            result={"step": "Initial Site Scrape"}
+                            status="website_error",
+                            message=error_msg,
+                            result={
+                                "step": "Initial Site Scrape", 
+                                "error": error_str,
+                                "continue_research": True  # Continue with research even if website extraction fails
+                            }
                         )
         else:
             msg += "\n⏩ No company URL provided, proceeding directly to research phase"
@@ -130,6 +135,10 @@ class GroundingNode:
             "websocket_manager": state.get('websocket_manager'),
             "job_id": state.get('job_id')
         }
+
+        # If there was an error in the initial extraction, store it in the state
+        if "⚠️ Error extracting website content:" in msg:
+            research_state["error"] = error_str
 
         return research_state
 
