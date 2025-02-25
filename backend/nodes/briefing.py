@@ -1,5 +1,3 @@
-from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 import google.generativeai as genai
 from typing import Dict, Any, Union, List
 import os

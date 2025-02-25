@@ -7,6 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from ..classes import ResearchState
+from ..utils.references import format_references_section
 
 class Editor:
     """Compiles individual section briefings into a cohesive final report."""
@@ -93,8 +94,7 @@ class Editor:
         """Compile section briefings into a final report and update the state."""
         try:
             company = context.get('company', 'Unknown')
-            industry = context.get('industry', 'Unknown')
-            hq = context.get('hq_location', 'Unknown')
+            
             
             # Step 1: Initial Compilation
             if websocket_manager := state.get('websocket_manager'):
@@ -193,18 +193,15 @@ class Editor:
         if references:
             logger.info(f"Found {len(references)} references to add during compilation")
             
-            # Get pre-processed reference titles from curator
+            # Get pre-processed reference info from curator
+            reference_info = state.get('reference_info', {})
             reference_titles = state.get('reference_titles', {})
             
-            reference_lines = ["\n## References"]
-            for ref in references:
-                title = reference_titles.get(ref, ref)
-                if title == ref or not title:
-                    reference_lines.append(f"* [{ref}]({ref})")
-                else:
-                    reference_lines.append(f"* [{title}]({ref})")
+            logger.info(f"Reference info from state: {reference_info}")
+            logger.info(f"Reference titles from state: {reference_titles}")
             
-            reference_text = "\n".join(reference_lines)
+            # Use the references module to format the references section
+            reference_text = format_references_section(references, reference_info, reference_titles)
             logger.info(f"Added {len(references)} references during compilation")
         
         prompt = f"""You are compiling a comprehensive research report about {company}.
@@ -217,7 +214,7 @@ Create a comprehensive and focused report on {company} that:
 2. Maintains important details from each section
 3. Logically organizes information and removes transitional commentary / explanations
 4. Uses clear section headers and structure
-5. MUST include all references provided in the References section
+5. MUST include all references provided in the References section exactly as formatted
 
 Formatting rules:
 Strictly enforce this EXACT document structure:
@@ -321,6 +318,9 @@ Strictly enforce this EXACT document structure:
 ## News
 [News content with ### subsections]
 
+## References
+[References in MLA format - PRESERVE EXACTLY AS PROVIDED]
+
 Critical rules:
 1. The document MUST start with "# {company} Research Report"
 2. The document MUST ONLY use these exact ## headers in this order:
@@ -336,6 +336,7 @@ Critical rules:
 7. Never use more than one blank line between sections
 8. Format all bullet points with *
 9. Add one blank line before and after each section/list
+10. DO NOT CHANGE the format of references - keep them exactly as provided
 
 Return the polished report in flawless markdown format. No explanation."""
         

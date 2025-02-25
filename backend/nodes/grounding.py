@@ -45,7 +45,7 @@ class GroundingNode:
                     await websocket_manager.send_status_update(
                         job_id=job_id,
                         status="processing",
-                        message="🌐 Analyzing company website",
+                        message="Analyzing company website",
                         result={"step": "Initial Site Scrape"}
                     )
 

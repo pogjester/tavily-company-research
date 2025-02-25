@@ -4,6 +4,7 @@ import os
 from ..classes import ResearchState
 from urllib.parse import urlparse, urljoin
 import logging
+from ..utils.references import process_references_from_search_results
 
 logger = logging.getLogger(__name__)
 
@@ -190,44 +191,8 @@ class Curator:
 
             state[f'curated_{data_field}'] = relevant_docs
 
-        # Sort references by score and select top 10
-        all_top_references.sort(key=lambda x: x[1], reverse=True)
-        
-        # Use a set to store unique URLs, keeping only the highest scored version of each URL
-        seen_urls = set()
-        unique_references = []
-        reference_titles = {}  # Store titles for references
-        
-        for url, score in all_top_references:
-            # Skip if URL is not valid
-            if not url or not url.startswith(('http://', 'https://')):
-                continue
-
-            # Normalize URL by removing trailing slashes and query parameters
-            try:
-                parsed = urlparse(url)
-                normalized_url = parsed._replace(query='', fragment='').geturl().rstrip('/')
-                if not normalized_url.startswith('http'):
-                    normalized_url = 'https://' + normalized_url
-                
-                if normalized_url not in seen_urls:
-                    seen_urls.add(normalized_url)
-                    unique_references.append((normalized_url, score))
-                    
-                    # Find and store the title for this URL
-                    for data_type in ['curated_company_data', 'curated_industry_data', 'curated_financial_data', 'curated_news_data']:
-                        if curated_data := state.get(data_type, {}):
-                            for doc in curated_data.values():
-                                if doc.get('url') == url:
-                                    reference_titles[normalized_url] = doc.get('title', '')
-                                    break
-            except Exception as e:
-                logger.error(f"Error normalizing URL {url}: {e}")
-                continue
-        
-        # Take exactly 10 unique references (or all if less than 10)
-        top_references = unique_references[:10]
-        top_reference_urls = [url for url, _ in top_references]
+        # Process references using the references module
+        top_reference_urls, reference_titles, reference_info = process_references_from_search_results(state)
         
         # Log the number of references found
         logger.info(f"Found {len(top_reference_urls)} unique references")
@@ -238,6 +203,7 @@ class Curator:
         state['messages'] = messages
         state['references'] = top_reference_urls
         state['reference_titles'] = reference_titles
+        state['reference_info'] = reference_info
 
         # Send final curation stats
         if websocket_manager := state.get('websocket_manager'):
