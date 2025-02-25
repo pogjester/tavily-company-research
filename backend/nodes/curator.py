@@ -30,47 +30,57 @@ class Curator:
         if not docs:
             return []
 
-        print(f"\nDebug: Evaluating {len(docs)} documents")
+        logger.info(f"Evaluating {len(docs)} documents")
         
         evaluated_docs = []
         try:
             # Evaluate each document using Tavily's score
             for doc in docs:
-                tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
-                
-                # Keep documents with good Tavily score
-                if tavily_score >= self.relevance_threshold:  # Adjusted threshold since we're only using Tavily
-                    print(f"\nDocument score: {tavily_score:.3f} for '{doc.get('title', 'No title')}'")
+                try:
+                    # Ensure score is a valid float
+                    tavily_score = float(doc.get('score', 0))  # Default to 0 if no score
                     
-                    evaluated_doc = {
-                        **doc,
-                        "evaluation": {
-                            "overall_score": tavily_score,
-                            "query": doc.get('query', '')
+                    # Keep documents with good Tavily score
+                    if tavily_score >= self.relevance_threshold:
+                        logger.info(f"Document passed threshold with score {tavily_score:.4f} for '{doc.get('title', 'No title')}'")
+                        
+                        evaluated_doc = {
+                            **doc,
+                            "evaluation": {
+                                "overall_score": tavily_score,  # Store as float
+                                "query": doc.get('query', '')
+                            }
                         }
-                    }
-                    evaluated_docs.append(evaluated_doc)
-                    
-                    # Send incremental update for kept document
-                    if websocket_manager := state.get('websocket_manager'):
-                        if job_id := state.get('job_id'):
-                            await websocket_manager.send_status_update(
-                                job_id=job_id,
-                                status="document_kept",
-                                message=f"Kept document: {doc.get('title', 'No title')}",
-                                result={
-                                    "step": "Curation",
-                                    "doc_type": doc.get('doc_type', 'unknown'),
-                                    "title": doc.get('title', 'No title')
-                                }
-                            )
-                else:
-                    print(f"Skipping document with low score ({tavily_score:.3f}): {doc.get('title', 'No title')}")
+                        evaluated_docs.append(evaluated_doc)
+                        
+                        # Send incremental update for kept document
+                        if websocket_manager := state.get('websocket_manager'):
+                            if job_id := state.get('job_id'):
+                                await websocket_manager.send_status_update(
+                                    job_id=job_id,
+                                    status="document_kept",
+                                    message=f"Kept document: {doc.get('title', 'No title')}",
+                                    result={
+                                        "step": "Curation",
+                                        "doc_type": doc.get('doc_type', 'unknown'),
+                                        "title": doc.get('title', 'No title'),
+                                        "score": tavily_score
+                                    }
+                                )
+                    else:
+                        logger.info(f"Document below threshold with score {tavily_score:.4f} for '{doc.get('title', 'No title')}'")
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error processing score for document: {e}")
+                    continue
                     
         except Exception as e:
-            print(f"Error during document evaluation: {e}")
+            logger.error(f"Error during document evaluation: {e}")
             return []
 
+        # Sort evaluated docs by score before returning
+        evaluated_docs.sort(key=lambda x: float(x['evaluation']['overall_score']), reverse=True)
+        logger.info(f"Returning {len(evaluated_docs)} evaluated documents")
+        
         return evaluated_docs
 
     async def curate_data(self, state: ResearchState) -> ResearchState:
@@ -140,7 +150,6 @@ class Curator:
 
         # Track document counts for each type
         doc_counts = {}
-        all_top_references = []
 
         for data_field, emoji, doc_type, urls, docs in curation_tasks:
             msg.append(f"\n{emoji}: Found {len(docs)} documents")
@@ -169,7 +178,7 @@ class Curator:
             relevant_docs = {url: doc for url, doc in zip(urls, evaluated_docs)}
             sorted_items = sorted(relevant_docs.items(), key=lambda item: item[1]['evaluation']['overall_score'], reverse=True)
             
-            # Limit to top 15 documents
+            # Limit to top 30 documents per category
             if len(sorted_items) > 30:
                 sorted_items = sorted_items[:30]
             relevant_docs = dict(sorted_items)
@@ -181,21 +190,17 @@ class Curator:
 
             if relevant_docs:
                 msg.append(f"  ✓ Kept {len(relevant_docs)} relevant documents")
+                logger.info(f"Kept {len(relevant_docs)} documents for {doc_type} with scores above threshold")
             else:
                 msg.append(f"  ⚠️ No documents met relevance threshold")
+                logger.info(f"No documents met relevance threshold for {doc_type}")
 
-            # Collect references with scores
-            current_references = [(url, doc['evaluation']['overall_score']) 
-                                for url, doc in relevant_docs.items()]
-            all_top_references.extend(current_references)
-
+            # Store curated documents in state
             state[f'curated_{data_field}'] = relevant_docs
-
+            
         # Process references using the references module
         top_reference_urls, reference_titles, reference_info = process_references_from_search_results(state)
-        
-        # Log the number of references found
-        logger.info(f"Found {len(top_reference_urls)} unique references")
+        logger.info(f"Selected top {len(top_reference_urls)} references for the report")
         
         # Update state with references and their titles
         messages = state.get('messages', [])

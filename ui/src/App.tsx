@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
 
 type ResearchStatus = {
   step: string;
@@ -762,6 +763,7 @@ function App() {
             <div className={`mt-4 ${glassStyle} rounded-xl p-4 overflow-x-auto`}>
               <ReactMarkdown
                 rehypePlugins={[rehypeRaw]}
+                remarkPlugins={[remarkGfm]}
                 components={{
                   div: ({node, ...props}) => (
                     <div className="space-y-4 text-gray-200" {...props} />
@@ -806,6 +808,29 @@ function App() {
                       );
                     }
                     
+                    // Convert URLs in text to clickable links
+                    const urlRegex = /(https?:\/\/[^\s<>"]+)/g;
+                    if (urlRegex.test(text)) {
+                      const parts = text.split(urlRegex);
+                      return (
+                        <p className="text-gray-200 my-2" {...props}>
+                          {parts.map((part, i) => 
+                            urlRegex.test(part) ? (
+                              <a 
+                                key={i}
+                                href={part}
+                                className="text-blue-500 hover:text-blue-400 underline decoration-blue-500 hover:decoration-blue-400 cursor-pointer transition-colors"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {part}
+                              </a>
+                            ) : part
+                          )}
+                        </p>
+                      );
+                    }
+                    
                     return <p className="text-gray-200 my-2" {...props}>{children}</p>;
                   },
                   ul: ({node, ...props}) => (
@@ -814,8 +839,14 @@ function App() {
                   li: ({node, ...props}) => (
                     <li className="text-gray-200" {...props} />
                   ),
-                  a: ({node, ...props}) => (
-                    <a className="text-blue-400 hover:text-blue-300 transition-colors" {...props} />
+                  a: ({node, href, ...props}) => (
+                    <a 
+                      href={href}
+                      className="text-blue-500 hover:text-blue-400 underline decoration-blue-500 hover:decoration-blue-400 cursor-pointer transition-colors" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      {...props} 
+                    />
                   ),
                 }}
               >

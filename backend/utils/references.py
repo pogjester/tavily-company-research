@@ -57,8 +57,8 @@ def extract_title_from_url_path(url: str) -> str:
             title = ' '.join(word.capitalize() for word in path.split())
             
             # If title is still too long, truncate it
-            if len(title) > 60:
-                title = title[:57] + "..."
+            if len(title) > 100:
+                title = title[:97] + "..."
                 
             return title
         return ""
@@ -67,12 +67,29 @@ def extract_title_from_url_path(url: str) -> str:
         return ""
 
 def clean_title(title: str) -> str:
-    """Clean up a title by removing trailing periods or quotes and truncating if needed."""
+    """Clean up a title by removing dates, trailing periods or quotes, and truncating if needed."""
     if not title:
         return ""
     
+    original_title = title
+    
     # Remove any trailing periods or quotes
     title = title.strip().rstrip('.').strip('"\'')
+    
+    # Remove date patterns like "2024 - 10 - 03 -" or "2024-10-03-" or similar variations
+    title = re.sub(r'^\d{4}[-\s]*\d{1,2}[-\s]*\d{1,2}[-\s]*', '', title)
+    
+    # Remove any leading/trailing hyphens and whitespace after date removal
+    title = title.strip('- ').strip()
+    
+    # If title became empty after cleaning, return empty string
+    if not title:
+        logger.warning(f"Title became empty after cleaning: '{original_title}'")
+        return ""
+    
+    # Log if we made changes to the title
+    if title != original_title:
+        logger.info(f"Cleaned title from '{original_title}' to '{title}'")
     
     return title
 
@@ -118,14 +135,35 @@ def process_references_from_search_results(state: Dict[str, Any]) -> Tuple[List[
     # Collect references with scores from all data types
     data_types = ['curated_company_data', 'curated_industry_data', 'curated_financial_data', 'curated_news_data']
     
+    # Log the start of reference processing
+    logger.info("Starting to process references from search results")
+    
     for data_type in data_types:
         if curated_data := state.get(data_type, {}):
-            current_references = [(url, doc['evaluation']['overall_score']) 
-                                for url, doc in curated_data.items()]
-            all_top_references.extend(current_references)
+            for url, doc in curated_data.items():
+                try:
+                    # Ensure we have a valid score
+                    if 'evaluation' in doc and 'overall_score' in doc['evaluation']:
+                        score = float(doc['evaluation']['overall_score'])
+                    else:
+                        # Fallback to raw score if available
+                        score = float(doc.get('score', 0))
+                    
+                    logger.info(f"Found reference in {data_type}: URL={url}, Score={score:.4f}")
+                    all_top_references.append((url, score))
+                except (KeyError, ValueError, TypeError) as e:
+                    logger.warning(f"Error processing score for {url} in {data_type}: {e}")
+                    continue
     
-    # Sort references by score
-    all_top_references.sort(key=lambda x: x[1], reverse=True)
+    logger.info(f"Collected a total of {len(all_top_references)} references before deduplication")
+    
+    # Sort references by score in descending order
+    all_top_references.sort(key=lambda x: float(x[1]), reverse=True)
+    
+    # Log top 20 references before deduplication to verify sorting
+    logger.info("Top 20 references by score before deduplication:")
+    for i, (url, score) in enumerate(all_top_references[:20]):
+        logger.info(f"{i+1}. Score: {score:.4f} - URL: {url}")
     
     # Use a set to store unique URLs, keeping only the highest scored version of each URL
     seen_urls = set()
@@ -136,6 +174,7 @@ def process_references_from_search_results(state: Dict[str, Any]) -> Tuple[List[
     for url, score in all_top_references:
         # Skip if URL is not valid
         if not url or not url.startswith(('http://', 'https://')):
+            logger.info(f"Skipping invalid URL: {url}")
             continue
 
         # Normalize URL
@@ -150,41 +189,58 @@ def process_references_from_search_results(state: Dict[str, Any]) -> Tuple[List[
             domain = parsed.netloc
             
             # Find and store the title and other info for this URL
+            title = None
+            website_name = None
+            
+            # Look for the document info in all data types
             for data_type in data_types:
-                if curated_data := state.get(data_type, {}):
+                if not title and (curated_data := state.get(data_type, {})):
                     for doc in curated_data.values():
                         if doc.get('url') == url:
                             title = doc.get('title', '')
-                            
-                            # Clean up the title
-                            title = clean_title(title)
-                            
-                            logger.info(f"Found title for URL {url}: '{title}'")
-                            
-                            # Only store non-empty titles
-                            if title and title.strip() and title != url:
-                                reference_titles[normalized_url] = title
-                            
-                            # Extract a better website name from the domain
-                            website_name = extract_website_name_from_domain(domain)
-                            
-                            # Store additional information for MLA citation
-                            reference_info[normalized_url] = {
-                                'title': title,
-                                'domain': domain,
-                                'website': website_name,
-                                'url': normalized_url,
-                                'score': score
-                            }
-                            logger.info(f"Stored reference info: {reference_info[normalized_url]}")
-                            break
+                            if title:
+                                # Clean up the title
+                                title = clean_title(title)
+                                if title and title.strip() and title != url:
+                                    reference_titles[normalized_url] = title
+                                    logger.info(f"Found title for URL {url}: '{title}'")
+                                    break
+            
+            # If no title was found, log it
+            if not title:
+                logger.info(f"No valid title found for URL {url}")
+            
+            # Extract a better website name from the domain
+            website_name = extract_website_name_from_domain(domain)
+            
+            # Store additional information for MLA citation
+            reference_info[normalized_url] = {
+                'title': title or '',
+                'domain': domain,
+                'website': website_name,
+                'url': normalized_url,
+                'score': score
+            }
+            logger.info(f"Stored reference info for {normalized_url} with score {score:.4f}")
+    
+    # Sort unique references by score again to ensure proper ordering
+    unique_references.sort(key=lambda x: float(x[1]), reverse=True)
+    
+    # Log unique references by score to verify sorting
+    logger.info(f"Found {len(unique_references)} unique references after deduplication")
+    logger.info("Unique references by score (sorted):")
+    for i, (url, score) in enumerate(unique_references):
+        logger.info(f"{i+1}. Score: {score:.4f} - URL: {url}")
     
     # Take exactly 10 unique references (or all if less than 10)
     top_references = unique_references[:10]
     top_reference_urls = [url for url, _ in top_references]
     
-    # Log the number of references found
-    logger.info(f"Found {len(top_reference_urls)} unique references")
+    # Log final top 10 references
+    logger.info(f"Final top {len(top_reference_urls)} references selected:")
+    for i, url in enumerate(top_reference_urls):
+        score = next((s for u, s in unique_references if u == url), 0)
+        logger.info(f"{i+1}. Score: {score:.4f} - URL: {url}")
     
     return top_reference_urls, reference_titles, reference_info
 
@@ -207,8 +263,8 @@ def format_reference_for_markdown(reference_entry: Dict[str, Any]) -> str:
         if not title:
             title = f"Information from {website}"
     
-    # Format: Website Name. "Title." [URL](URL)
-    return f"* {website}. \"{title}.\" [{url}]({url})"
+    # Format: * Website. "Title." URL
+    return f"* {website}. \"{title}.\" {url}"
 
 def extract_link_info(line: str) -> tuple[str, str]:
     """Extract title and URL from markdown link."""
@@ -255,12 +311,13 @@ def format_references_section(references: List[str], reference_info: Dict[str, D
     
     logger.info(f"Formatting {len(references)} references for the report")
     
-    # Create a list of reference entries with all the information needed for sorting
+    # Create a list of reference entries with all the information needed
     reference_entries = []
     for ref in references:
         info = reference_info.get(ref, {})
         website = info.get('website', '')
         title = info.get('title', '')
+        score = info.get('score', 0)
         
         # If title is not in reference_info, try to get it from reference_titles
         if not title or title.strip() == "":
@@ -285,21 +342,23 @@ def format_references_section(references: List[str], reference_info: Dict[str, D
             'title': title,
             'url': ref,
             'domain': domain,
-            # For sorting: use website name, then title
-            'sort_key': f"{website.lower()}{title.lower()}"
+            'score': score
         }
         logger.info(f"Created reference entry: {entry}")
         reference_entries.append(entry)
     
-    # Alphabetize references by website name, then title
-    reference_entries.sort(key=lambda x: x['sort_key'])
+    # Keep references in the same order they were provided (which should be by score)
+    # This preserves the top 10 scoring order from process_references_from_search_results
+    logger.info("Maintaining reference order based on scores")
     
     # Format references in MLA style
     reference_lines = ["\n## References"]
     for entry in reference_entries:
-        reference_lines.append(format_reference_for_markdown(entry))
+        reference_line = format_reference_for_markdown(entry)
+        reference_lines.append(reference_line)
+        logger.info(f"Added reference: {reference_line}")
     
     reference_text = "\n".join(reference_lines)
-    logger.info(f"Reference text: {reference_text}")
+    logger.info(f"Completed references section with {len(reference_entries)} entries")
     
     return reference_text 
