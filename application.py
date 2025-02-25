@@ -49,7 +49,7 @@ app.add_middleware(
 )
 
 manager = WebSocketManager()
-pdf_service = PDFService(REPORTS_DIR)
+pdf_service = PDFService({"pdf_output_dir": REPORTS_DIR})
 
 job_status = defaultdict(lambda: {
     "status": "pending",
@@ -76,6 +76,10 @@ class ResearchRequest(BaseModel):
     hq_location: str | None = None
 
 class PDFGenerationRequest(BaseModel):
+    report_content: str
+    company_name: str | None = None
+
+class GeneratePDFRequest(BaseModel):
     report_content: str
     company_name: str | None = None
 
@@ -235,8 +239,19 @@ async def generate_pdf(job_id: str):
     return pdf_service.generate_pdf_from_job(job_id, job_status, mongodb)
 
 @app.post("/generate-pdf")
-async def generate_pdf_from_content(data: PDFGenerationRequest):
-    return pdf_service.generate_pdf(data.report_content, data.company_name)
+async def generate_pdf(data: GeneratePDFRequest):
+    """Generate a PDF from markdown content."""
+    try:
+        success, result = pdf_service.generate_pdf(data.report_content, data.company_name)
+        if success:
+            pdf_path = result
+            pdf_filename = os.path.basename(pdf_path)
+            return {"status": "success", "pdf_url": f"/research/pdf/{pdf_filename}"}
+        else:
+            error_msg = result
+            raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
     uvicorn.run(

@@ -1,130 +1,65 @@
-import os
 import logging
+import os
 import re
-from datetime import datetime
+import urllib.parse
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
-from backend.utils.utils import generate_pdf_from_md
+from backend.utils.utils import (
+    generate_pdf_from_md,
+)
 
 logger = logging.getLogger(__name__)
 
 class PDFService:
-    def __init__(self, reports_dir: str):
-        self.reports_dir = reports_dir
-        os.makedirs(self.reports_dir, exist_ok=True)
-
-    def _sanitize_company_name(self, company_name: str) -> str:
+    def __init__(self, config):
+        self.output_dir = config.get("pdf_output_dir", "pdfs")
+        # Create output directory if it doesn't exist
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+    def _sanitize_company_name(self, company_name):
         """Sanitize company name for use in filenames."""
-        return ''.join(c for c in (company_name or 'Unknown_Company') 
-                      if c.isalnum() or c.isspace()).strip().replace(' ', '_')
-
-    def _generate_pdf_filename(self, company_name: str) -> str:
-        """Generate a standardized PDF filename."""
+        # Replace spaces with underscores and remove special characters
+        sanitized = re.sub(r'[^\w\s-]', '', company_name).strip().replace(' ', '_')
+        return sanitized.lower()
+    
+    def _generate_pdf_filename(self, company_name):
+        """Generate a PDF filename based on the company name."""
         sanitized_name = self._sanitize_company_name(company_name)
-        timestamp = datetime.now().strftime('%Y-%m-%d')
-        return f"{sanitized_name}_Research_Report_{timestamp}.pdf"
-
-    def _preprocess_text(self, text: str) -> str:
-        """Preprocess text to ensure proper XML tag nesting."""
-        # Remove any existing para tags first
-        text = text.replace('<para>', '').replace('</para>', '')
+        return f"{sanitized_name}_report.pdf"
+    
+    def generate_pdf(self, markdown_content, company_name=None):
+        """
+        Generate a PDF from markdown content.
         
-        def process_links(text):
-            """Process markdown links into properly formatted ReportLab links."""
-            def replace_link(match):
-                text = match.group(1)
-                url = match.group(2)
-                # Use ReportLab's link tag with proper formatting
-                return f'<link href="{url}" color="blue" textColor="blue"><u>{text or url}</u></link>'
+        Args:
+            markdown_content (str): The markdown content to convert to PDF
+            company_name (str, optional): The company name to use in the filename
             
-            # Handle markdown links [text](url)
-            text = re.sub(r'\[(.*?)\]\((.*?)\)', replace_link, text)
-            return text
-        
-        # Process bold and italic tags with proper nesting
-        def process_tags(text):
-            # First handle bold text
-            text = re.sub(r'\*\*(.*?)\*\*', lambda m: f'<b>{m.group(1)}</b>', text)
-            
-            # Then handle italic text, being careful not to match inside tags
-            parts = []
-            current_pos = 0
-            in_tag = False
-            start_italic = None
-            
-            for i, char in enumerate(text):
-                if char == '<':
-                    in_tag = True
-                elif char == '>':
-                    in_tag = False
-                elif not in_tag and char == '*' and text[i-1:i] != '\\':
-                    if start_italic is None:
-                        start_italic = i
-                    else:
-                        # Found closing asterisk
-                        italic_content = text[start_italic+1:i]
-                        parts.append(text[current_pos:start_italic])
-                        parts.append(f'<i>{italic_content}</i>')
-                        current_pos = i + 1
-                        start_italic = None
-            
-            parts.append(text[current_pos:])
-            text = ''.join(parts)
-            
-            # Clean up any remaining asterisks
-            text = text.replace('\\*', '*')  # Restore escaped asterisks
-            text = text.replace('**', '').replace('*', '')
-            
-            return text
-
-        # Process the text in the correct order: links first, then other formatting
-        text = process_links(text)
-        text = process_tags(text)
-        
-        # Ensure text is wrapped in para tags
-        if not text.startswith('<para>'):
-            text = f'<para>{text}</para>'
-            
-        return text
-
-    def generate_pdf(self, report_content: str, company_name: str = None) -> dict:
-        """Generate a PDF from markdown content."""
+        Returns:
+            tuple: (success status, pdf_path or error message)
+        """
         try:
-            # Preprocess the content line by line
-            processed_lines = []
-            for line in report_content.split('\n'):
-                if line.strip():
-                    processed_lines.append(self._preprocess_text(line))
+            # Extract company name from the first line if not provided
+            if not company_name:
+                first_line = markdown_content.split('\n')[0].strip()
+                if first_line.startswith('# '):
+                    company_name = first_line[2:].strip()
                 else:
-                    processed_lines.append('')
+                    company_name = "Company Research"
             
-            processed_content = '\n'.join(processed_lines)
-            
+            # Generate the output filename
             pdf_filename = self._generate_pdf_filename(company_name)
-            pdf_path = os.path.join(self.reports_dir, pdf_filename)
-
-            try:
-                generate_pdf_from_md(processed_content, pdf_path)
-            except Exception as e:
-                logger.error(f"PDF generation failed: {e}")
-                # Clean up failed PDF if it exists
-                if os.path.exists(pdf_path):
-                    try:
-                        os.remove(pdf_path)
-                    except Exception:
-                        pass
-                raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
-
-            return {
-                "status": "success",
-                "pdf_url": f"/research/pdf/{pdf_filename}"
-            }
-
-        except HTTPException:
-            raise
+            pdf_path = os.path.join(self.output_dir, pdf_filename)
+            
+            # Generate the PDF
+            generate_pdf_from_md(markdown_content, pdf_path)
+            
+            # Return success and the path
+            return True, pdf_path
+            
         except Exception as e:
-            logger.error(f"PDF generation failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            error_msg = f"Error generating PDF: {str(e)}"
+            logger.error(error_msg)
+            return False, error_msg
 
     def generate_pdf_from_job(self, job_id: str, job_status: dict, mongodb=None) -> dict:
         """Generate a PDF from a job's report content."""

@@ -19,10 +19,24 @@ class Editor:
         
         # Configure OpenAI
         self.openai_client = AsyncOpenAI(api_key=self.openai_key)
+        
+        # Initialize context dictionary for use across methods
+        self.context = {
+            "company": "Unknown Company",
+            "industry": "Unknown",
+            "hq_location": "Unknown"
+        }
 
     async def compile_briefings(self, state: ResearchState) -> ResearchState:
         """Compile individual briefing categories from state into a final report."""
         company = state.get('company', 'Unknown Company')
+        
+        # Update context with values from state
+        self.context = {
+            "company": company,
+            "industry": state.get('industry', 'Unknown'),
+            "hq_location": state.get('hq_location', 'Unknown')
+        }
         
         # Send initial compilation status
         if websocket_manager := state.get('websocket_manager'):
@@ -93,8 +107,7 @@ class Editor:
     async def edit_report(self, state: ResearchState, briefings: Dict[str, str], context: Dict[str, Any]) -> str:
         """Compile section briefings into a final report and update the state."""
         try:
-            company = context.get('company', 'Unknown')
-            
+            company = self.context["company"]
             
             # Step 1: Initial Compilation
             if websocket_manager := state.get('websocket_manager'):
@@ -204,17 +217,21 @@ class Editor:
             reference_text = format_references_section(references, reference_info, reference_titles)
             logger.info(f"Added {len(references)} references during compilation")
         
+        # Use values from centralized context
+        company = self.context["company"]
+        industry = self.context["industry"]
+        hq_location = self.context["hq_location"]
+        
         prompt = f"""You are compiling a comprehensive research report about {company}.
 
 Compiled briefings:
 {combined_content}
 
-Create a comprehensive and focused report on {company} that:
+Create a comprehensive and focused report on {company}, a {industry} company headquartered in {hq_location} that:
 1. Integrates information from all sections into a cohesive non-repetitive narrative
 2. Maintains important details from each section
 3. Logically organizes information and removes transitional commentary / explanations
 4. Uses clear section headers and structure
-5. MUST include all references provided in the References section exactly as formatted
 
 Formatting rules:
 Strictly enforce this EXACT document structure:
@@ -232,8 +249,6 @@ Strictly enforce this EXACT document structure:
 
 ## News
 [News content with ### subsections]
-
-{reference_text}
 
 Return the report in clean markdown format. No explanations or commentary."""
         
@@ -253,23 +268,34 @@ Return the report in clean markdown format. No explanations or commentary."""
                 temperature=0,
                 stream=False
             )
-            return response.choices[0].message.content.strip()
+            initial_report = response.choices[0].message.content.strip()
+            
+            # Append the references section after LLM processing
+            if reference_text:
+                initial_report = f"{initial_report}\n\n{reference_text}"
+            
+            return initial_report
         except Exception as e:
             logger.error(f"Error in initial compilation: {e}")
             return (combined_content or "").strip()
         
     async def content_sweep(self, state: ResearchState, content: str, company: str) -> str:
         """Sweep the content for any redundant information."""
+        # Use values from centralized context
+        company = self.context["company"]
+        industry = self.context["industry"]
+        hq_location = self.context["hq_location"]
+        
         prompt = f"""You are an expert briefing editor. You are given a report on {company}.
 
 Current report:
 {content}
 
 1. Remove redundant or repetitive information
-2. Remove sections lacking substantial content
-3. Remove any meta-commentary (e.g. "Here is the news...")
-4. Use bullet points (*) for lists
-5. Keep all factual content
+2. Remove information that is not relevant to {company}, the {industry} company headquartered in {hq_location}.
+3. Remove sections lacking substantial content
+4. Remove any meta-commentary (e.g. "Here is the news...")
+5. Use bullet points (*) for lists
 
 Return the cleaned report in flawless markdown format. No explanations or commentary."""
         
@@ -296,6 +322,9 @@ Return the cleaned report in flawless markdown format. No explanations or commen
 
     async def clean_markdown(self, state: ResearchState, content: str, company: str) -> str:
         """Clean up and format in markdown."""
+        # Use company from centralized context
+        company = self.context["company"]
+        
         prompt = f"""You are an expert markdown editor. You are given a report on {company}.
 
 Current report:
@@ -336,7 +365,7 @@ Critical rules:
 7. Never use more than one blank line between sections
 8. Format all bullet points with *
 9. Add one blank line before and after each section/list
-10. DO NOT CHANGE the format of references - keep them exactly as provided
+10. DO NOT CHANGE the format of the references section
 
 Return the polished report in flawless markdown format. No explanation."""
         

@@ -1,51 +1,34 @@
 import markdown
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    ListFlowable,
-    ListItem,
-    KeepTogether
-)
 import logging
 import os
 import re
 import datetime
 from typing import List, Dict
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+import tempfile
 
-#############################################
-# references.py placeholders. Adjust as needed
-#############################################
+
 def extract_domain_name(url: str) -> str:
-    """Placeholder for domain extraction."""
-    # Basic example using regex:
+    """Extract domain name from URL."""
     match = re.search(r'https?://([^/]+)', url)
     if match:
         return match.group(1)
     return url
 
 def extract_title_from_url_path(url: str) -> str:
-    """Placeholder for extracting a title from a URL path."""
-    # Very naive approach: use last path segment
+    """Extract a title from a URL path."""
     parts = url.rstrip('/').split('/')
     return parts[-1] if parts else 'No title found'
 
 def extract_link_info(markdown_link: str) -> tuple[str, str]:
-    """
-    Extract the text and URL from a Markdown link of the form:
-      [text](URL)
-    """
+    """Extract text and URL from a Markdown link [text](URL)."""
     match = re.match(r'\[(.*?)\]\((.*?)\)', markdown_link)
     if match:
         return match.group(1), match.group(2)
     return ("", "")
-
-#############################################
-# Main code below
-#############################################
 
 logger = logging.getLogger(__name__)
 
@@ -57,23 +40,21 @@ def clean_text(text: str) -> str:
     text = text.replace('\\"', '"')
     # Convert literal \n to actual newlines
     text = text.replace('\\n', '\n')
-    # Preserve bullet points by not cleaning spaces after asterisks
-    text = re.sub(r'(?<!\*)\s+(?!\*)', ' ', text)
-    # Remove any XML/para tags as they'll be added during processing
+    # Remove any XML/para tags
     text = text.replace('<para>', '').replace('</para>', '')
     return text.strip()
 
 def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
-    """Convert markdown content to PDF using reportlab."""
+    """Convert markdown content to PDF using a simplified ReportLab approach."""
     try:
         # Ensure output directory exists
         os.makedirs(os.path.dirname(os.path.abspath(output_pdf)), exist_ok=True)
         
-        # Normalize line endings and split into lines
+        # Normalize line endings
         markdown_content = markdown_content.replace('\r\n', '\n')  # Normalize Windows line endings
         markdown_content = markdown_content.replace('\\n', '\n')   # Convert literal \n to newlines
         
-        # Extract company name from the first line if it starts with # 
+        # Extract company name from the first line
         company_name = "Company Research Report"
         first_line = markdown_content.split('\n')[0].strip()
         if first_line.startswith('# '):
@@ -81,15 +62,6 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
         
         # Current date for the footer
         current_date = datetime.datetime.now().strftime("%B %d, %Y")
-        
-        def add_page_number(canvas, doc):
-            """Add page numbers and a footer on every page."""
-            canvas.saveState()
-            canvas.setFont('Helvetica', 8)
-            footer_text = f"{company_name} | {current_date} | Page {doc.page}"
-            # Draw the footer text at the bottom, centered
-            canvas.drawCentredString(letter[0] / 2, 20, footer_text)
-            canvas.restoreState()
         
         # Create the PDF document
         doc = SimpleDocTemplate(
@@ -100,330 +72,171 @@ def generate_pdf_from_md(markdown_content: str, output_pdf: str) -> None:
             topMargin=40,
             bottomMargin=40
         )
-
-        # Create base styles
-        base_styles = getSampleStyleSheet()
-
-        # Create custom styles
-        custom_styles = {
-            'MainTitle': ParagraphStyle(
-                'MainTitle',
-                parent=base_styles['Heading1'],
-                fontSize=20,
-                spaceAfter=12,
-                spaceBefore=4,
-                textColor=colors.HexColor('#1a1a1a'),
-                leading=24,
-                keepWithNext=True  # Keep title with next content
-            ),
-            'CustomHeading2': ParagraphStyle(
-                'CustomHeading2',
-                parent=base_styles['Heading2'],
-                fontSize=16,
-                spaceBefore=12,
-                spaceAfter=6,
-                textColor=colors.HexColor('#2c3e50'),
-                leading=20,
-                keepWithNext=True
-            ),
-            'CustomHeading3': ParagraphStyle(
-                'CustomHeading3',
-                parent=base_styles['Heading3'],
-                fontSize=12,
-                spaceBefore=10,
-                spaceAfter=4,
-                textColor=colors.HexColor('#2c3e50'),
-                leading=16,
-                fontName='Helvetica-Bold',
-                italic=0,
-                keepWithNext=True
-            ),
-            'CustomBody': ParagraphStyle(
-                'CustomBody',
-                parent=base_styles['Normal'],
-                fontSize=10,
-                spaceBefore=2,
-                spaceAfter=2,
-                leading=12,
-                textColor=colors.HexColor('#2c3e50')
-            ),
-            'ListItem': ParagraphStyle(
-                'ListItem',
-                parent=base_styles['Normal'],
-                fontSize=10,
-                spaceBefore=2,
-                spaceAfter=2,
-                leading=12,
-                textColor=colors.HexColor('#2c3e50'),
-                firstLineIndent=0,
-                leftIndent=20
-            ),
-            'Link': ParagraphStyle(
-                'Link',
-                parent=base_styles['Normal'],
-                fontSize=10,
-                textColor=colors.HexColor('#0066cc'),
-                spaceBefore=2,
-                spaceAfter=2,
-                leading=12,
-                underline=True
-            ),
-            'Reference': ParagraphStyle(
-                'Reference',
-                parent=base_styles['Normal'],
-                fontSize=9,
-                spaceBefore=1,
-                spaceAfter=1,
-                leading=11,
-                textColor=colors.HexColor('#333333'),
-                leftIndent=15,
-                firstLineIndent=-10  # Creates a hanging indent effect
-            )
-        }
         
-        def process_markdown_formatting(text):
-            """Convert **bold** and *italic* markers to ReportLab tags and auto-hyperlink URLs."""
-            # First check if this is a bullet point line
-            if text.lstrip().startswith('* '):
-                # Don't process the bullet point marker
-                prefix = text[:text.find('* ') + 2]  # Keep the spaces and bullet intact
-                rest = text[text.find('* ') + 2:]    # Process the rest of the line
-                
-                # Process the rest of the line normally
-                if rest.startswith('[') and '](' in rest and rest.endswith(')'):
-                    # It's a link bullet
-                    title, url = extract_link_info(rest)
-                    rest = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
-                else:
-                    # Handle other formatting in the bullet text
-                    if '<link' not in rest:
-                        rest = re.sub(
-                            r'(https?://[^\s<>"]+)',
-                            lambda m: f'<link href="{m.group(1)}" color="blue" textColor="blue"><u>{m.group(1)}</u></link>',
-                            rest
-                        )
-                    rest = re.sub(r'\*\*(.*?)\*\*', lambda m: f'<b>{m.group(1)}</b>', rest)
-                    rest = re.sub(r'\*(.*?)\*', lambda m: f'<i>{m.group(1)}</i>', rest)
-                    rest = rest.replace('**', '')
-                
-                text = prefix + rest
-            else:
-                # Not a bullet point - process normally
-                if '<link' not in text:
-                    text = re.sub(
-                        r'(https?://[^\s<>"]+)',
-                        lambda m: f'<link href="{m.group(1)}" color="blue" textColor="blue"><u>{m.group(1)}</u></link>',
-                        text
-                    )
-                text = re.sub(r'\*\*(.*?)\*\*', lambda m: f'<b>{m.group(1)}</b>', text)
-                text = re.sub(r'\*(.*?)\*', lambda m: f'<i>{m.group(1)}</i>', text)
-                text = text.replace('**', '')
-            
-            # Ensure proper XML structure
-            if not text.startswith('<para>'):
-                text = f'<para>{text}</para>'
-            
-            return text
+        # Setup styles
+        styles = getSampleStyleSheet()
         
-        # Process entire markdown for bold/italic, then split into lines
-        markdown_content = process_markdown_formatting(markdown_content)
-        lines = [clean_text(line) for line in markdown_content.split('\n')]
-
+        # Custom styles
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=colors.black,
+            spaceAfter=12
+        )
+        
+        heading2_style = ParagraphStyle(
+            'Heading2',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.black,
+            spaceBefore=12,
+            spaceAfter=6,
+            fontName='Helvetica-Bold'
+        )
+        
+        heading3_style = ParagraphStyle(
+            'Heading3',
+            parent=styles['Heading3'],
+            fontSize=12,
+            textColor=colors.black,
+            spaceBefore=10,
+            spaceAfter=4
+        )
+        
+        normal_style = ParagraphStyle(
+            'Normal',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.black,
+            spaceBefore=2,
+            spaceAfter=2
+        )
+        
+        list_item_style = ParagraphStyle(
+            'ListItem',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.black,
+            spaceBefore=2,
+            spaceAfter=2,
+            leftIndent=10,
+            firstLineIndent=0,
+            bulletIndent=0
+        )
+        
+        # Create the story (content)
         story = []
-        in_list = False
-        current_list_items = []
-        in_references = False
-        reference_section = []
-
-        # Add a small spacer at the beginning
-        story.append(Spacer(1, 2))
         
-        for line in lines:
-            line = line.strip()
+        # Process markdown content into PDF elements
+        lines = markdown_content.split('\n')
+        i = 0
+        
+        # Track if we're in a list
+        in_list = False
+        list_items = []
+        
+        while i < len(lines):
+            line = lines[i].strip()
             
-            # Handle blank lines
+            # Skip empty lines
             if not line:
-                # If we were building a multi-item list, flush it
-                if in_list and current_list_items:
+                if in_list and list_items:
+                    # Flush list if we were building one
                     story.append(ListFlowable(
-                        [
-                            ListItem(
-                                Paragraph(item, custom_styles['ListItem']),
-                                value='bullet',
-                                leftIndent=20,
-                                bulletColor=colors.HexColor('#2c3e50'),
-                                bulletType='bullet',
-                                bulletFontName='Helvetica',
-                                bulletFontSize=10
-                            )
-                            for item in current_list_items
-                        ],
+                        [ListItem(Paragraph(item, list_item_style)) for item in list_items],
                         bulletType='bullet',
-                        leftIndent=20,
-                        bulletOffsetX=10,
-                        bulletOffsetY=2,
-                        start=None,
-                        bulletDedent=20,
-                        bulletFormat='•',
-                        spaceBefore=4,
-                        spaceAfter=4
+                        leftIndent=10,
+                        bulletFontName='Helvetica',
+                        bulletFontSize=10,
+                        bulletOffsetY=0,
+                        bulletDedent=10,
+                        spaceAfter=0
                     ))
-                    current_list_items = []
+                    list_items = []
                     in_list = False
-
-                story.append(Spacer(1, 2))
+                
+                story.append(Spacer(1, 6))
+                i += 1
                 continue
             
-            # Handle # , ##, ### headings
+            # Headings
             if line.startswith('# '):
-                text = clean_text(line[2:])
-                story.append(KeepTogether([
-                    Paragraph(text, custom_styles['MainTitle']),
-                    Spacer(1, 2)
-                ]))
-                in_references = False
-
+                story.append(Paragraph(line[2:], title_style))
             elif line.startswith('## '):
-                text = clean_text(line[3:])
-                if text.lower() == 'references':
-                    in_references = True
-                    reference_section.append(Paragraph(text, custom_styles['CustomHeading2']))
-                    reference_section.append(Spacer(1, 2))
-                else:
-                    in_references = False
-                    story.append(KeepTogether([
-                        Paragraph(text, custom_styles['CustomHeading2']),
-                        Spacer(1, 2)
-                    ]))
-
+                story.append(Paragraph(line[3:], heading2_style))
             elif line.startswith('### '):
-                text = clean_text(line[4:])
-                in_references = False
-                story.append(KeepTogether([
-                    Paragraph(text, custom_styles['CustomHeading3']),
-                    Spacer(1, 2)
-                ]))
-
-            # Handle bullet points
-            elif line.startswith('* ') or (line.strip() and line.strip().startswith('* ')):
-                # Clean up the line and ensure proper bullet point format
-                line = line.strip()
+                story.append(Paragraph(line[4:], heading3_style))
+            
+            # Bullet points
+            elif line.startswith('* '):
                 bullet_text = line[2:].strip()  # Remove the '* ' but keep any other asterisks
                 
-                # For non-references bullet points
+                # For links in bullet points
                 if bullet_text.startswith('[') and '](' in bullet_text and bullet_text.endswith(')'):
-                    # It's a link bullet
-                    title, url = extract_link_info(bullet_text)
-                    bullet_text = f'<link href="{url}" color="blue" textColor="blue"><u>{title or url}</u></link>'
-                else:
-                    # Only process non-link text
-                    bullet_text = process_markdown_formatting(bullet_text)
-
-                # Add it immediately as a single bullet item with explicit bullet styling
-                story.append(ListFlowable(
-                    [
-                        ListItem(
-                            Paragraph(bullet_text, custom_styles['ListItem']),
-                            value='bullet',
-                            leftIndent=20,
-                            bulletColor=colors.HexColor('#2c3e50'),
-                            bulletType='bullet',
-                            bulletFontName='Helvetica',
-                            bulletFontSize=10,
-                            bulletFormat='•'
-                        )
-                    ],
-                    bulletType='bullet',
-                    leftIndent=20,
-                    bulletOffsetX=10,
-                    bulletOffsetY=2,
-                    start=None,
-                    bulletDedent=20,
-                    bulletFormat='•',
-                    spaceBefore=4,
-                    spaceAfter=4
-                ))
-
-            # Handle standalone Markdown links
-            elif line.startswith('[') and '](' in line and line.endswith(')'):
-                link_title, link_url = extract_link_info(line)
-                # Don't process the URL again since it's already a raw URL
-                link_paragraph = f'<link href="{link_url}" color="blue" textColor="blue"><u>{link_title or link_url}</u></link>'
-                story.append(Paragraph(link_paragraph, custom_styles['Link']))
+                    link_text, link_url = extract_link_info(bullet_text)
+                    # Simplified link format to avoid potential formatting issues
+                    bullet_text = f'<link href="{link_url}" color="blue"><u>{link_text or link_url}</u></link>'
+                
+                list_items.append(bullet_text)
+                in_list = True
             
-            # Regular paragraph
+            # Regular paragraphs (including links)
             else:
-                # If we were in a multi-item list, flush any leftover bullets
-                if in_list and current_list_items:
-                    story.append(ListFlowable(
-                        [
-                            ListItem(
-                                Paragraph(item, custom_styles['ListItem']),
-                                value='bullet',
-                                leftIndent=20,
-                                bulletColor=colors.HexColor('#2c3e50'),
-                                bulletType='bullet',
-                                bulletFontName='Helvetica',
-                                bulletFontSize=10
-                            )
-                            for item in current_list_items
-                        ],
-                        bulletType='bullet',
-                        leftIndent=20,
-                        bulletOffsetX=10,
-                        bulletOffsetY=2,
-                        start=None,
-                        bulletDedent=20,
-                        bulletFormat='•',
-                        spaceBefore=4,
-                        spaceAfter=4
-                    ))
-                    current_list_items = []
-                    in_list = False
-
-                if in_references:
-                    # We are in references but it's not a bullet -> just a paragraph reference
-                    line = process_markdown_formatting(line)
-                    reference_section.append(Paragraph(line, custom_styles['CustomBody']))
-                else:
-                    # Normal text paragraph
-                    line = process_markdown_formatting(line)
-                    story.append(Paragraph(line, custom_styles['CustomBody']))
+                # Handle bold and italic text
+                line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)  # Bold
+                line = re.sub(r'\*(.*?)\*', r'<i>\1</i>', line)      # Italic
+                
+                # Check for links in the text
+                if '[' in line and '](' in line:
+                    try:
+                        # Process links
+                        parts = []
+                        last_idx = 0
+                        for match in re.finditer(r'\[(.*?)\]\((.*?)\)', line):
+                            # Add text before the link
+                            if match.start() > last_idx:
+                                parts.append(line[last_idx:match.start()])
+                            
+                            # Add the link
+                            link_text = match.group(1)
+                            link_url = match.group(2)
+                            parts.append(f'<link href="{link_url}" color="blue"><u>{link_text}</u></link>')
+                            
+                            last_idx = match.end()
+                        
+                        # Add any remaining text
+                        if last_idx < len(line):
+                            parts.append(line[last_idx:])
+                        
+                        line = ''.join(parts)
+                    except Exception as e:
+                        # If link processing fails, use the original line
+                        logger.error(f"Error processing links: {e}")
+                
+                # Add the paragraph
+                story.append(Paragraph(line, normal_style))
+            
+            i += 1
         
-        # If there's a half-finished list at the end, flush it
-        if in_list and current_list_items:
+        # Flush any remaining list
+        if in_list and list_items:
             story.append(ListFlowable(
-                [
-                    ListItem(
-                        Paragraph(item, custom_styles['ListItem']),
-                        value='bullet',
-                        leftIndent=20,
-                        bulletColor=colors.HexColor('#2c3e50'),
-                        bulletType='bullet',
-                        bulletFontName='Helvetica',
-                        bulletFontSize=10
-                    )
-                    for item in current_list_items
-                ],
+                [ListItem(Paragraph(item, list_item_style)) for item in list_items],
                 bulletType='bullet',
-                leftIndent=20,
-                bulletOffsetX=10,
-                bulletOffsetY=2,
-                start=None,
-                bulletDedent=20,
-                bulletFormat='•',
-                spaceBefore=4,
-                spaceAfter=4
+                leftIndent=10,
+                bulletFontName='Helvetica',
+                bulletFontSize=10,
+                bulletOffsetY=0,
+                bulletDedent=10,
+                spaceAfter=0
             ))
-
-        # If we have references, add them at the end
-        if reference_section:
-            story.append(KeepTogether(reference_section))
-
+        
         # Build the PDF
-        doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
+        doc.build(story)
+        
         logger.info(f"Successfully generated PDF: {output_pdf}")
-
+    
     except Exception as e:
         error_msg = f"Error generating PDF: {str(e)}"
         logger.error(error_msg)
@@ -451,8 +264,7 @@ def convert_markdown_to_pdf_elements(markdown_text: str, custom_styles: Dict) ->
     def process_markdown_formatting(text):
         # Bold
         text = re.sub(r'(?<!\*)\*\*(.*?)\*\*(?!\*)', r'<b>\1</b>', text)
-        # Italic - only match *text* that's not at the start of a line and not a bullet point
-        text = re.sub(r'(?<!^)(?<!\s)\*(.*?)\*(?!\s)', r'<i>\1</i>', text)
+        
         # Clean up any remaining double asterisks (bold markers) but preserve single asterisks for bullet points
         text = text.replace('**', '')
         return text
